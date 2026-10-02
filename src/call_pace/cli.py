@@ -25,7 +25,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from . import __version__
+from ._version import __version__
 from .ablation import (
     compare_lookup_variants,
     covariate_signal_report,
@@ -71,6 +71,11 @@ def _add_data_options(parser: argparse.ArgumentParser, amounts: bool = True) -> 
     parser.add_argument("--end", type=_iso_date, help="last day to read (inclusive)")
     parser.add_argument("--covariate", action="append", default=[], help="exogenous column name")
     parser.add_argument("--artifacts", help="directory for fitted models (default: artifacts)")
+    parser.add_argument(
+        "--fill-missing-days",
+        action="store_true",
+        help="treat operating weekdays with no rows as zero-activity days",
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -90,11 +95,11 @@ def build_parser() -> argparse.ArgumentParser:
     _add_data_options(train)
     train.add_argument("--models", default="lookup,knn,quantile")
     train.add_argument("--k", type=int, help="fix k instead of selecting it by cross-validation")
-    train.add_argument("--fill-missing-days", action="store_true")
 
     validate = sub.add_parser("validate", help="walk-forward evaluation and promotion decision")
     _add_data_options(validate, amounts=False)
     validate.add_argument("--challengers", default="knn,quantile")
+    validate.add_argument("--per-bucket", action="store_true", help="also decide per bucket")
     validate.add_argument("--report", help="also write the markdown report to this file")
 
     projection = sub.add_parser("projection", help="end-of-day projection comparison")
@@ -176,7 +181,7 @@ def _read(args: argparse.Namespace, config: Config) -> pd.DataFrame:
 def _read_frame(args: argparse.Namespace, config: Config) -> tuple[FeatureSpec, pd.DataFrame]:
     hourly = _read(args, config)
     spec = FeatureSpec.from_data(hourly, config)
-    return spec, build_frame(hourly, spec)
+    return spec, build_frame(hourly, spec, fill_missing_days=args.fill_missing_days)
 
 
 def _split(text: str) -> list[str]:
@@ -227,6 +232,13 @@ def cmd_validate(args: argparse.Namespace) -> int:
     challengers = _split(args.challengers)
     result = run_walk_forward(frame, config, spec, challengers)
     lines = [result.to_markdown(), "", *_decisions(result, challengers, config)]
+    if args.per_bucket:
+        for bucket in spec.buckets:
+            lines += [
+                "",
+                f"bucket {bucket}",
+                *_decisions(result.for_bucket(bucket), challengers, config),
+            ]
     text = "\n".join(lines)
     print(text)
     if args.report:

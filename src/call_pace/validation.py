@@ -102,6 +102,20 @@ class WalkForwardResult:
             rows[-1].update({f"mae_{m}": mae(group["actual"], group[m]) for m in models})
         return pd.DataFrame(rows)
 
+    def for_bucket(self, bucket: str) -> WalkForwardResult:
+        """The same run restricted to one bucket, with fold metrics recomputed for it.
+
+        Pooled metrics can hide that a model wins on a high-volume bucket and loses on a sparse
+        one. Use this to decide routing per bucket (see `Config.routing`).
+        """
+        block = self.predictions[self.predictions["bucket"] == bucket]
+        if block.empty:
+            raise ConfigError(f"no predictions for bucket {bucket!r}")
+        rows = [_fold_row(int(index), group) for index, group in block.groupby("fold")]
+        return WalkForwardResult(
+            self.folds, block.reset_index(drop=True), pd.DataFrame(rows), self.knn_cv, self.config
+        )
+
     def to_markdown(self) -> str:
         parts = ["Fold metrics", markdown_table(self.fold_metrics)]
         if self.knn_cv is not None:

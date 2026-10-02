@@ -108,6 +108,17 @@ def test_only_the_requested_challengers_are_evaluated(frame, spec, config):
         run_walk_forward(frame, config, spec, challengers=("arima",))
 
 
+def test_a_result_can_be_restricted_to_one_bucket(result):
+    auto = result.for_bucket("auto")
+    assert set(auto.predictions["bucket"]) == {"auto"}
+    assert auto.fold_metrics["n"].tolist() == [60, 60, 60]  # 5 days x 12 hours per fold
+    block = auto.predictions[auto.predictions["fold"] == 3]
+    assert auto.holdout()["mae_knn"] == pytest.approx(mae(block["actual"], block["knn"]))
+    assert decide_promotion(auto, "knn").challenger == "knn"
+    with pytest.raises(ConfigError):
+        result.for_bucket("nobody")
+
+
 def test_markdown_report_lists_folds_and_selected_k(result):
     text = result.to_markdown()
     assert "Fold metrics" in text and "Selected k:" in text and "| fold |" in text

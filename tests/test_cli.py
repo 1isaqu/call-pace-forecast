@@ -67,6 +67,35 @@ def test_train_reports_what_it_fitted_and_writes_artifacts(trained):
     assert manifest["buckets"] == ["auto", "consumer"] and manifest["days"] == 90
 
 
+def test_fill_missing_days_turns_a_silent_weekday_into_a_zero_day(workspace, tmp_path):
+    hourly = pd.read_csv(workspace / "hourly.csv")
+    gapped = hourly[hourly["date"] != sorted(hourly["date"].unique())[40]]
+    path = tmp_path / "gapped.csv"
+    gapped.to_csv(path, index=False)
+    days = {}
+    for flag in ([], ["--fill-missing-days"]):
+        folder = tmp_path / ("filled" if flag else "plain")
+        assert (
+            main(
+                [
+                    "train",
+                    "--csv",
+                    str(path),
+                    "--models",
+                    "lookup",
+                    "--artifacts",
+                    str(folder),
+                    *flag,
+                ]
+            )
+            == 0
+        )
+        days[bool(flag)] = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))[
+            "days"
+        ]
+    assert days == {False: 89, True: 90}
+
+
 def test_validate_prints_folds_decisions_and_band_coverage(workspace, capsys, tmp_path):
     report = tmp_path / "report.md"
     assert main(["validate", *data_args(workspace), "--report", str(report)]) == 0
@@ -75,6 +104,13 @@ def test_validate_prints_folds_decisions_and_band_coverage(workspace, capsys, tm
     assert "PROMOTE: knn" in out or "KEEP BASELINE: knn" in out
     assert "paired test vs lookup" in out and "empirical" in out
     assert report.read_text(encoding="utf-8").startswith("Fold metrics")
+
+
+def test_validate_can_also_decide_per_bucket(workspace, capsys):
+    assert main(["validate", *data_args(workspace), "--per-bucket"]) == 0
+    out = capsys.readouterr().out
+    assert "bucket auto" in out and "bucket consumer" in out
+    assert out.count("paired test vs lookup") == 6  # pooled + two buckets, two challengers each
 
 
 def test_validate_with_only_the_baseline_and_one_challenger(workspace, capsys):

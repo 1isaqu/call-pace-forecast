@@ -15,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from . import __version__
+from ._version import __version__
 from .baseline import LookupForecaster
 from .errors import ArtifactError
 from .features import FeatureSpec

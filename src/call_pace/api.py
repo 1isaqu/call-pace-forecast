@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from . import __version__
+from ._version import __version__
 from .errors import ArtifactError, ConfigError, InvalidRequestError
 from .service import ALL, PaceService
 
