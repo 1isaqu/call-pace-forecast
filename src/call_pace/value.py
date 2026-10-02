@@ -148,6 +148,10 @@ class TicketLookup:
             }
         return self
 
+    def covers(self, buckets: Sequence[str]) -> bool:
+        """True when a ticket was fitted for every bucket in `buckets`."""
+        return all(bucket in self.tables for bucket in buckets)
+
     def ticket_for(self, bucket: str, hour: int) -> float:
         """Ticket for a bucket-hour, rounded to cents. Unknown buckets are an error."""
         if bucket not in self.tables:

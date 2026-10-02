@@ -2,7 +2,9 @@
 
 The generator produces a plausible shape, not a realistic one: a bimodal hourly curve, a
 weekday effect, a day-level multiplier (which is what makes "volume so far" informative about
-the rest of the day) and negative-binomial noise. All parameters are invented.
+the rest of the day) and negative-binomial noise. One bucket has high volume and one is sparse,
+because the interesting behaviour of the models differs between the two. All parameters are
+invented.
 """
 
 from __future__ import annotations
@@ -19,7 +21,7 @@ from .schedule import next_operating_days
 
 
 def _default_levels() -> dict[str, float]:
-    return {"auto": 45.0, "consumer": 28.0}
+    return {"auto": 90.0, "consumer": 15.0}
 
 
 def _default_tickets() -> dict[str, float]:
@@ -32,8 +34,8 @@ class SyntheticSpec:
 
     daily_level: Mapping[str, float] = field(default_factory=_default_levels)
     weekday_multipliers: tuple[float, ...] = (1.10, 1.05, 1.00, 0.95, 0.85)
-    day_sigma: float = 0.30
-    dispersion: float = 12.0
+    day_sigma: float = 0.45
+    dispersion: float = 30.0
     growth_per_month: float = 0.0
     covariate_effect: float = 0.0
     event_period_days: int = 20

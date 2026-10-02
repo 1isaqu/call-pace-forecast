@@ -85,16 +85,28 @@ def _normalise_keys(df: pd.DataFrame, what: str) -> pd.DataFrame:
     return out
 
 
-def _parse_dates(values: pd.Series, what: str) -> pd.Series:
+def parse_date_column(values: pd.Series) -> pd.Series:
+    """Parse a column of dates or timestamps to naive midnight, whatever mix of formats it has.
+
+    Raises ValueError (or TypeError) when a value cannot be read as a date.
+    """
     try:
         parsed = pd.to_datetime(values)
+    except ValueError:
+        parsed = pd.to_datetime(values, format="mixed")
+    if parsed.dt.tz is not None:
+        parsed = parsed.dt.tz_localize(None)
+    return parsed.dt.normalize().astype("datetime64[ns]")
+
+
+def _parse_dates(values: pd.Series, what: str) -> pd.Series:
+    try:
+        parsed = parse_date_column(values)
     except (ValueError, TypeError) as exc:
         raise ContractError(f"{what} data has an unparseable `date` value: {exc}") from exc
     if parsed.isna().any():
         raise ContractError(f"{what} data has null `date` values")
-    if parsed.dt.tz is not None:
-        parsed = parsed.dt.tz_localize(None)
-    return parsed.dt.normalize().astype("datetime64[ns]")
+    return parsed
 
 
 def _parse_hours(values: pd.Series, what: str) -> pd.Series:
