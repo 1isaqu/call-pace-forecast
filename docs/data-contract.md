@@ -80,11 +80,12 @@ Several rows per hour are expected. Validation is `contract.validate_amounts`.
 from datetime import date
 import pandas as pd
 
+
 class MyLoader:
     def load_hourly(self, start: date, end: date) -> pd.DataFrame:
         """Rows with columns bucket, date, hour, count (+ covariates), start and end INCLUSIVE."""
 
-    def load_amounts(self, start: date, end: date) -> pd.DataFrame:   # optional
+    def load_amounts(self, start: date, end: date) -> pd.DataFrame:  # optional
         """Rows with columns bucket, date, hour, amount, one per event."""
 ```
 

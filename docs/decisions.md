@@ -68,7 +68,9 @@ error is isolated; its numbers are therefore a best case for the decomposition.
 A business-plausible covariate (days since the last bulk intake of accounts, say) adds a dimension to
 every distance and may add nothing. `compare_feature_sets` and `covariate_signal_report` exist so that
 the claim is tested; the signal report controls for weekday because cyclic covariates are easily
-confounded with the weekly pattern.
+confounded with the weekly pattern. The same applies to a finer lookup key such as the weekday:
+`compare_share_keys` accepts it only when the held-out gain is real and the cells it creates are not
+mostly thin.
 
 **13. Quantile bands are uncalibrated by design.**
 The library reports nominal versus empirical coverage instead of silently recalibrating. A band that
@@ -104,9 +106,10 @@ nothing has been observed, so the day has not visibly started. This is documente
 than left as an accident.
 
 **20. Short-lived cache for today's data, long-lived for models.**
-Polling displays can multiply load on the source; a 30 second cache absorbs it. Models change once per
-training run, so a long TTL is enough. One lock-protected cache serves both and triggers a single load
-for concurrent requests.
+Polling displays can multiply load on the source; a 30 second cache absorbs it, at the price of data
+that can be up to 30 seconds old. Models change once per training run: they are cached for a long TTL
+but keyed on the file's modification time, so retraining is picked up without a restart. One
+lock-protected cache serves both and triggers a single load for concurrent requests.
 
 **21. One feature path for training and serving.**
 The most common way a forecast silently degrades in production is that serving computes a feature

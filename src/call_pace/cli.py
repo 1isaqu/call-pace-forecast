@@ -39,7 +39,7 @@ from .features import FeatureSpec, build_frame
 from .loaders import CsvLoader
 from .loaders.sqlserver import SqlOptions, loader_from_env
 from .montecarlo import MonteCarloConfig, run_monte_carlo
-from .projection import evaluate_projection
+from .projection import compare_share_keys, evaluate_projection
 from .service import PaceService
 from .synthetic import SyntheticSpec, make_synthetic_amounts, make_synthetic_hourly
 from .training import train_models
@@ -106,6 +106,13 @@ def build_parser() -> argparse.ArgumentParser:
     _add_data_options(projection, amounts=False)
     projection.add_argument("--holdout-days", type=int, default=20)
     projection.add_argument("--k", type=int, default=10)
+    projection.add_argument(
+        "--extra-key",
+        action="append",
+        default=[],
+        help="also test whether adding this column (for example weekday_pos) to the "
+        "(bucket, hour) share-curve key earns its thinner cells",
+    )
 
     ablate = sub.add_parser("ablate", help="ablation studies")
     _add_data_options(ablate, amounts=False)
@@ -252,7 +259,8 @@ def _decisions(result, challengers: Sequence[str], config: Config) -> list[str]:
         lines.append(decide_promotion(result, name, PromotionCriteria()).explain())
         paired = compare_models(result, name, "lookup")
         lines.append(
-            f"  paired test vs lookup: mean error difference {paired.mean_difference:+.3f}, "
+            "  paired test vs lookup over all folds: mean absolute-error difference "
+            f"{paired.mean_difference:+.3f} (negative favours {name}), "
             f"p={paired.p_value:.4f}"
         )
     if "quantile" in challengers:
@@ -271,6 +279,10 @@ def cmd_projection(args: argparse.Namespace) -> int:
         frame, args.holdout_days, args.k, config.covariates, config.start_hour, config.end_hour
     )
     print(markdown_table(table))
+    if args.extra_key:
+        keys = ("bucket", "hour", *args.extra_key)
+        print()
+        print(compare_share_keys(frame, keys, holdout_days=args.holdout_days).explain())
     return 0
 
 
@@ -318,6 +330,11 @@ def cmd_montecarlo(args: argparse.Namespace) -> int:
 
 
 def _service(args: argparse.Namespace, config: Config) -> PaceService:
+    if config.covariates:
+        raise ConfigError(
+            "serving models that use covariates needs a Python covariate_provider: "
+            "use PaceService from the library; the command line cannot supply one"
+        )
     loader, amount_loader = _loaders(args, config)
     store = ArtifactStore(config.artifacts_dir, config.artifact_ttl_seconds)
     clock = (lambda: args.now) if getattr(args, "now", None) else datetime.now

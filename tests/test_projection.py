@@ -8,6 +8,8 @@ from call_pace.features import FeatureSpec, build_frame
 from call_pace.projection import (
     NeighborProjector,
     ProportionProjector,
+    cell_sparsity,
+    compare_share_keys,
     evaluate_projection,
 )
 
@@ -128,3 +130,88 @@ def test_evaluation_scores_every_projector_on_the_same_rows(frame):
 def test_evaluation_needs_more_history_than_the_holdout():
     with pytest.raises(InsufficientDataError):
         evaluate_projection(flat_days([12, 24, 36]), holdout_days=3)
+
+
+# --- finer keys for the share curve ---------------------------------------------------------
+
+
+def monday_morning_days(weeks):
+    """Mondays put their volume in the morning, other days in the afternoon.
+
+    A share curve pooled over weekdays describes the other four days, so it projects Mondays
+    wrongly; a curve keyed by weekday is exact. Every day has the same total.
+    """
+    rows = []
+    for day in pd.bdate_range("2026-01-05", periods=5 * weeks):
+        morning = day.weekday() == 0
+        for hour in range(8, 20):
+            early = hour < 14
+            rows.append(("a", day, hour, 10.0 if early == morning else 2.0))
+    data = pd.DataFrame(rows, columns=["bucket", "date", "hour", "count"])
+    return build_frame(data, FeatureSpec.from_config(CFG, ["a"]))
+
+
+def test_sparsity_counts_cells_and_treats_absent_cells_as_thin():
+    frame = monday_morning_days(5)  # every (hour, weekday) cell has five rows
+    keys = ["bucket", "hour", "weekday_pos"]
+    full = cell_sparsity(frame, keys, min_obs=5)
+    assert (full.cells_possible, full.cells_present, full.cells_thin) == (60, 60, 0)
+    assert full.median_obs == 5.0 and full.thin_share == 0.0
+    gap = frame[~((frame["hour"] == 8) & (frame["weekday_pos"] == 0))]
+    assert cell_sparsity(gap, keys, min_obs=5).cells_thin == 1  # the absent cell
+    # With a higher bar the 59 present cells are short as well, plus the absent one.
+    assert cell_sparsity(gap, keys, min_obs=6).cells_thin == 60
+
+
+def test_sparsity_needs_real_columns_and_handles_an_empty_frame():
+    with pytest.raises(ConfigError):
+        cell_sparsity(monday_morning_days(1), ["bucket", "nope"])
+    empty = cell_sparsity(monday_morning_days(1).iloc[:0], ["bucket", "hour"])
+    assert empty.cells_possible == 0 and empty.thin_share == 0.0
+
+
+def test_a_finer_key_is_adopted_when_it_helps_and_its_cells_are_populated():
+    frame = monday_morning_days(12)
+    result = compare_share_keys(frame, ("bucket", "hour", "weekday_pos"), holdout_days=10)
+    assert result.mae_fine == pytest.approx(0.0) and result.mae_coarse > 1.0
+    assert result.fallbacks == 0 and result.sparsity.cells_thin == 0
+    assert result.paired.mean_difference < 0  # negative favours the finer key
+    assert result.adopt_fine and result.explain().startswith("ADOPT bucket+hour+weekday_pos")
+
+
+def test_a_finer_key_is_refused_when_it_does_not_help():
+    frame = flat_days([12, 24, 36, 48] * 15)  # one regular curve: nothing for a weekday to add
+    result = compare_share_keys(frame, ("bucket", "hour", "weekday_pos"), holdout_days=10)
+    assert result.gain_pct == 0.0 and not result.adopt_fine
+    assert "gain below the 5% needed" in result.explain()
+
+
+def test_a_finer_key_that_helps_is_still_refused_when_too_many_cells_are_thin():
+    frame = monday_morning_days(12)
+    result = compare_share_keys(
+        frame, ("bucket", "hour", "weekday_pos"), holdout_days=10, min_obs=500
+    )
+    assert result.gain_pct > 5.0 and result.sparsity.thin_share == 1.0
+    assert not result.adopt_fine and "cells are thin" in result.explain()
+
+
+def test_missing_fine_cells_fall_back_to_the_coarser_curve_and_are_counted():
+    frame = monday_morning_days(12)
+    dates = sorted(frame["date"].unique())
+    # A weekday value that never occurs in the training days:
+    frame.loc[frame["date"].isin(dates[-10:]), "weekday_pos"] = 9
+    result = compare_share_keys(frame, ("bucket", "hour", "weekday_pos"), holdout_days=10)
+    assert result.fallbacks == result.n > 0
+    assert result.mae_fine == pytest.approx(result.mae_coarse)  # a fallback is the coarse answer
+
+
+def test_the_fine_key_must_refine_the_coarse_key_and_exist():
+    frame = monday_morning_days(12)
+    with pytest.raises(ConfigError):
+        compare_share_keys(frame, ("bucket", "hour"))
+    with pytest.raises(ConfigError):
+        compare_share_keys(frame, ("bucket", "weekday_pos"))  # drops a coarse key
+    with pytest.raises(ConfigError):
+        compare_share_keys(frame, ("bucket", "hour", "nope"))
+    with pytest.raises(InsufficientDataError):
+        compare_share_keys(monday_morning_days(1), ("bucket", "hour", "weekday_pos"))

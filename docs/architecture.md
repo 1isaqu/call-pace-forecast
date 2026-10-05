@@ -51,7 +51,7 @@ A model is promoted only through the walk-forward protocol in [evaluation.md](ev
 | `contract` | The data contract, `validate_hourly` / `validate_amounts`, the loader protocols. |
 | `features` | `FeatureSpec` (persisted with each model), `build_frame` (training) and `serving_frame` (one day, as known now). Both paths use the same helpers. |
 | `baseline`, `knn`, `quantile` | The three phases. Each has `fit`, `predict`, `save`, `load`. |
-| `projection` | End-of-day total: share formula versus neighbour models. |
+| `projection` | End-of-day total: share formula versus neighbour models, and whether a finer share-curve key earns its thinner cells (`cell_sparsity`, `compare_share_keys`). |
 | `value` | Ticket lookup, `expected_value`, honest configuration search. |
 | `metrics`, `validation` | Post-processing alignment, MAE, directional accuracy, coverage, WAPE, folds, walk-forward, promotion rules, paired test. |
 | `ablation` | Feature subsets, lookup variants, covariate signal report. |
@@ -78,7 +78,9 @@ A model is promoted only through the walk-forward protocol in [evaluation.md](ev
   message in `errors`, so a display that polls the endpoint does not go blank.
 - **Caching.** Today's data is cached for `data_ttl_seconds` (default 30) to protect the source
   from polling bursts; loaded models are cached for `artifact_ttl_seconds` (default 24 hours).
-  Both use one lock-protected `TtlCache`, so concurrent requests trigger one load.
+  Both use one lock-protected `TtlCache`, so concurrent requests trigger one load. The model cache
+  key includes each file's modification time, so a retrained model is served from the next request
+  on, without waiting for the TTL or restarting the service.
 - **Artifacts live at runtime only.** `train` writes `artifacts/` (gitignored): `lookup.json`,
   `knn.joblib`, `quantile.joblib`, `ticket.json`, `manifest.json`. Nothing fitted is committed.
   `joblib` is pickle based, so load only artifacts you produced yourself.
@@ -95,4 +97,7 @@ A model is promoted only through the walk-forward protocol in [evaluation.md](ev
   row of the modelling frame); `run_walk_forward` is written against the three built-ins, but the
   baseline and metrics functions are independent of the model class.
 - New covariate: add a numeric, bucket-day-constant column and list it in `Config.covariates`;
-  use `ablate covariate` first to find out whether it carries any signal.
+  use `ablate covariate` first to find out whether it carries any signal. Training and validation
+  work from the command line; serving a covariate model needs a Python `covariate_provider`
+  (`PaceService(..., covariate_provider=fn)` with `fn(bucket, day) -> {name: value}`) because the
+  value for today has to come from somewhere the command line cannot know.

@@ -12,17 +12,25 @@ formula inverts exactly the identity the similarity model has to learn indirectl
 approximates a relation cannot beat a formula that states it unless it brings information the
 formula ignores (weekday effects, seasonality, external events). `evaluate_projection` lets you
 check that on your own data instead of taking it on faith.
+
+A related question is how finely the share curve itself should be keyed. Adding the weekday to
+the key can sharpen the curve, but every extra key value splits the history into thinner cells
+whose medians are noisier. `compare_share_keys` weighs the gain against `cell_sparsity`, with
+the same discipline as the rest of the library: a finer key is adopted only when it clearly
+helps on held-out days AND its cells stay populated.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
 
 from .errors import ConfigError, InsufficientDataError
 from .metrics import mae
+from .validation import PairedTest, paired_error_test
 
 MODES = ("hour_feature", "hour_partition")
 _CHUNK = 512
@@ -184,12 +192,7 @@ def evaluate_projection(
     Rows where any projector has no prediction (NaN) are left out for ALL projectors, so every
     column is computed on exactly the same observations. The last row, hour "all", pools them.
     """
-    dates = sorted(frame["date"].unique())
-    if len(dates) <= holdout_days:
-        raise InsufficientDataError(f"need more than {holdout_days} days, found {len(dates)}")
-    test_dates = dates[-holdout_days:]
-    train, test = frame[~frame["date"].isin(test_dates)], frame[frame["date"].isin(test_dates)]
-    test = test[test["day_total"] > 0].reset_index(drop=True)
+    train, test = _holdout_split(frame, holdout_days)
     projections = {"proportion": ProportionProjector().fit(train).predict(test)}
     for mode in MODES:
         model = NeighborProjector(k, mode, covariates, start_hour, end_hour).fit(train)
@@ -206,3 +209,166 @@ def _projection_row(label: str, group: pd.DataFrame) -> dict[str, float | str]:
     for name in ("proportion", *MODES):
         row[f"mae_{name}"] = mae(group["day_total"], group[name])
     return row
+
+
+def _holdout_split(frame: pd.DataFrame, holdout_days: int) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Earlier days train, the last `holdout_days` test; silent test days are left out."""
+    dates = sorted(frame["date"].unique())
+    if len(dates) <= holdout_days:
+        raise InsufficientDataError(f"need more than {holdout_days} days, found {len(dates)}")
+    test_dates = dates[-holdout_days:]
+    train, test = frame[~frame["date"].isin(test_dates)], frame[frame["date"].isin(test_dates)]
+    return train, test[test["day_total"] > 0].reset_index(drop=True)
+
+
+@dataclass(frozen=True)
+class CellSparsity:
+    """How thinly a set of key columns spreads the rows of a frame.
+
+    Every combination of key values is a cell. A cell with fewer than `min_obs` rows gives a
+    noisy median; a cell with none is absent. Both count as thin, because both force a lookup
+    to guess.
+    """
+
+    cells_possible: int
+    cells_present: int
+    cells_thin: int
+    min_obs: int
+    median_obs: float
+
+    @property
+    def thin_share(self) -> float:
+        return self.cells_thin / self.cells_possible if self.cells_possible else 0.0
+
+
+def _require_columns(frame: pd.DataFrame, columns: Sequence[str]) -> None:
+    missing = [c for c in columns if c not in frame.columns]
+    if missing:
+        raise ConfigError(f"columns {missing} are not in the frame")
+
+
+def cell_sparsity(frame: pd.DataFrame, keys: Sequence[str], min_obs: int = 5) -> CellSparsity:
+    """Cells that `keys` create in `frame`, and how many have fewer than `min_obs` rows.
+
+    The number of possible cells is the product of the distinct values of each key, so a cell
+    that never occurs is counted rather than silently ignored.
+    """
+    _require_columns(frame, keys)
+    sizes = frame.groupby(list(keys)).size()
+    possible = int(np.prod([frame[k].nunique() for k in keys]))
+    thin = int((sizes < min_obs).sum()) + (possible - len(sizes))
+    return CellSparsity(possible, len(sizes), thin, min_obs, float(sizes.median()))
+
+
+@dataclass(frozen=True)
+class KeyComparison:
+    """A finer share-curve key against a coarser one, on the same held-out rows."""
+
+    coarse_keys: tuple[str, ...]
+    fine_keys: tuple[str, ...]
+    n: int
+    mae_coarse: float
+    mae_fine: float
+    fallbacks: int
+    sparsity: CellSparsity
+    paired: PairedTest
+    min_gain_pct: float
+    max_thin_share: float
+
+    @property
+    def gain_pct(self) -> float:
+        """Relative error reduction of the finer key; zero when the coarse key is exact."""
+        if self.mae_coarse == 0:
+            return 0.0
+        return (self.mae_coarse - self.mae_fine) / self.mae_coarse * 100.0
+
+    @property
+    def adopt_fine(self) -> bool:
+        gain = self.gain_pct >= self.min_gain_pct
+        return gain and self.sparsity.thin_share <= self.max_thin_share
+
+    def explain(self) -> str:
+        fine, coarse = "+".join(self.fine_keys), "+".join(self.coarse_keys)
+        cells = self.sparsity
+        if self.adopt_fine:
+            verdict = f"ADOPT {fine}"
+        elif self.gain_pct >= self.min_gain_pct:
+            verdict = (
+                f"KEEP {coarse}: the gain is there but {cells.thin_share:.0%} of the cells are "
+                f"thin (limit {self.max_thin_share:.0%})"
+            )
+        else:
+            verdict = f"KEEP {coarse}: gain below the {self.min_gain_pct:g}% needed"
+        return "\n".join(
+            [
+                verdict,
+                f"  holdout MAE: {fine} {self.mae_fine:.3f} vs {coarse} {self.mae_coarse:.3f} "
+                f"({self.gain_pct:+.1f}% gain, n={self.n})",
+                f"  paired test (negative favours {fine}): mean difference "
+                f"{self.paired.mean_difference:+.3f}, p={self.paired.p_value:.4f}",
+                f"  cells of {fine}: {cells.cells_present} of {cells.cells_possible} present, "
+                f"{cells.cells_thin} thin (under {cells.min_obs} rows, absent ones included), "
+                f"median {cells.median_obs:.1f} rows per cell",
+                f"  rows that fell back to the coarser curve: {self.fallbacks}",
+            ]
+        )
+
+
+def _share_lookup(train: pd.DataFrame, test: pd.DataFrame, keys: Sequence[str]) -> np.ndarray:
+    """Median share per cell of `keys` learned on `train`, looked up for each `test` row."""
+    cells = train[train["share"].notna()].groupby(list(keys), as_index=False)["share"].median()
+    return test[list(keys)].merge(cells, on=list(keys), how="left")["share"].to_numpy(float)
+
+
+def _project(cumulative: np.ndarray, share: np.ndarray) -> np.ndarray:
+    """cumulative / share where the share is positive, NaN elsewhere."""
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return np.where(share > 0, cumulative / share, np.nan)
+
+
+def compare_share_keys(
+    frame: pd.DataFrame,
+    fine_keys: Sequence[str],
+    coarse_keys: Sequence[str] = ("bucket", "hour"),
+    holdout_days: int = 20,
+    min_obs: int = 5,
+    min_gain_pct: float = 5.0,
+    max_thin_share: float = 0.10,
+) -> KeyComparison:
+    """Does keying the share curve more finely (say by weekday) earn its thinner cells?
+
+    Both curves are learned on the earlier days and projected on the last `holdout_days` days.
+    A row whose finer cell was never seen falls back to the coarser curve and is counted. The
+    finer key is recommended only if it reduces the error by at least `min_gain_pct` percent AND
+    at most `max_thin_share` of its cells are thin (see `cell_sparsity`, measured on the training
+    days). The thresholds are invented defaults. Rows where either projection is undefined are
+    left out of both, so the two errors cover exactly the same observations.
+    """
+    fine, coarse = tuple(fine_keys), tuple(coarse_keys)
+    if not set(coarse) < set(fine):
+        raise ConfigError("fine_keys must contain every coarse key plus at least one more")
+    _require_columns(frame, [*fine, "share", "cumulative", "day_total"])
+    train, test = _holdout_split(frame, holdout_days)
+    coarse_share = _share_lookup(train, test, coarse)
+    fine_share = _share_lookup(train, test, fine)
+    fell_back = ~(fine_share > 0)
+    cumulative = test["cumulative"].to_numpy(float)
+    by_coarse = _project(cumulative, coarse_share)
+    by_fine = _project(cumulative, np.where(fell_back, coarse_share, fine_share))
+    valid = np.isfinite(by_coarse) & np.isfinite(by_fine)
+    if valid.sum() < 2:
+        raise InsufficientDataError("fewer than two held-out rows can be projected by both keys")
+    actual = test["day_total"].to_numpy(float)[valid]
+    error_coarse, error_fine = np.abs(by_coarse[valid] - actual), np.abs(by_fine[valid] - actual)
+    return KeyComparison(
+        coarse,
+        fine,
+        int(valid.sum()),
+        mae(actual, by_coarse[valid]),
+        mae(actual, by_fine[valid]),
+        int((fell_back & valid).sum()),
+        cell_sparsity(train, fine, min_obs),
+        paired_error_test(error_fine, error_coarse),
+        min_gain_pct,
+        max_thin_share,
+    )

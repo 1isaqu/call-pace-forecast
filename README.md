@@ -13,9 +13,9 @@ models: you connect your own data through a small, documented contract.
 ## What it does and why it is interesting
 
 - **A baseline that has to be beaten.** The expected count for an hour is the median of what that
-  (bucket, hour) produced recently. Every other model is only promoted if it beats this, by explicit,
-  scale-relative rules that tolerate a noisy fold.
-- **Features that cannot leak.** The volume so far is the total *before* the hour being predicted, and
+  (bucket, hour) produced recently. Challengers are judged against it by explicit, scale-relative
+  promotion rules that tolerate a noisy fold.
+- **Features built to avoid leakage.** The volume so far is the total *before* the hour being predicted, and
   the early-morning total is hidden until it has closed. Training and serving build features through
   the same code, and a test replays a past day hour by hour to prove they agree.
 - **Honest evaluation.** Expanding-window walk-forward; k is chosen on early folds; the last fold is a
@@ -23,8 +23,9 @@ models: you connect your own data through a small, documented contract.
 - **Uncertainty you can check.** The quantile model reports a band per hour and the tool prints the
   nominal and the empirical coverage so you can see whether the band can be trusted.
 - **Experiments as code.** Feature-subset search, lookup variants, a covariate signal test, an
-  end-of-day projection comparison (a formula against neighbour models), and a ticket-lookup search for
-  an expected-value forecast.
+  end-of-day projection comparison (a formula against neighbour models), a finer-key test that
+  weighs a gain against how thin the cells become, and a ticket-lookup search for an expected-value
+  forecast.
 - **A serving layer with a failure policy.** Bad requests raise, missing models raise, but a failing
   data source degrades to an empty, well-formed payload so a polling display keeps working.
 
@@ -58,7 +59,8 @@ More detail in [docs/architecture.md](docs/architecture.md).
 | 2 | `KnnForecaster`: standardised KNN over hour, cyclic weekday, volume so far, early-window total, bucket | yes | expected count |
 | 3 | `QuantileForecaster`: LightGBM, Poisson centre plus lower and upper quantile models | yes | expected count and a band |
 
-The interface never changes between phases: only `expected` gets more accurate.
+The shape of the pace table stays the same across phases: a better model makes `expected` more
+accurate, and the third phase adds a band around it.
 
 ## Quick start
 
@@ -78,10 +80,11 @@ call-pace pace --csv data/hourly.csv --amounts-csv data/amounts.csv \
 ```
 
 `synth` writes `data/` (git-ignored). `train` writes `artifacts/` (git-ignored). `pace` replays a
-moment of the last synthetic day: the `--now` option overrides the clock and the loader reads that
-day's rows from the CSV.
+moment of the last synthetic day (2026-06-19 with these options): the `--now` option overrides the
+clock and the loader reads that day's rows from the CSV.
 
-Example of what `validate` prints on the synthetic data (invented numbers; yours will differ):
+Abridged output of the `validate` command above. The data is invented and the run is deterministic,
+but exact digits can differ on other library versions:
 
 ```
 Fold metrics
@@ -129,8 +132,8 @@ The serving payload of `call-pace pace` (abridged; real output on the synthetic 
 ```
 
 `montecarlo` prints, per simulated month, percentiles of the model's MAE, of the lookup's MAE and of
-directional accuracy, then two probabilities. On the synthetic data with 100 scenarios (about 40
-seconds on the development machine) the last lines were:
+directional accuracy, then two probabilities. On the synthetic data with 100 scenarios (one to two
+minutes on the development machine) the last lines were:
 
 ```
 P(directional accuracy > 60% in month 6) = 9.0%
@@ -204,10 +207,15 @@ an absolute and a relative tolerance). See [docs/evaluation.md](docs/evaluation.
   nominal coverage is 50 percent; `validate` prints the empirical coverage on the holdout fold. Far
   above nominal means the band is wider than needed, far below means the model is overconfident.
   The library does not recalibrate bands.
-- Each closed hour carries `position`: `below_band`, `within_band` or `above_band`. At low volume a
-  delta of -1 is noise; `within_band` says so, `below_band` is the signal worth a look.
+- For a bucket served by the quantile model, each closed hour carries `position`: `below_band`,
+  `within_band` or `above_band`. At low volume a delta of -1 is noise; `within_band` says so,
+  `below_band` is the signal worth a look.
 - Bands exist per bucket only. The projected close is a point estimate without an interval, because
   summing per-hour bounds does not bound the sum.
+- A band is served only for a bucket routed to the quantile model: export
+  `CALL_PACE_ROUTING=auto=quantile`, then run `call-pace pace --bucket auto` as in the quick start.
+  On that invented data hour 8 comes out as an expectation of 4, a band of 3 to 6, an actual of 2
+  and the position `below_band`.
 
 ## Configuration
 
@@ -245,7 +253,7 @@ Commands:
 | `call-pace synth` | write an invented dataset (hourly counts, optional amounts, optional covariate) |
 | `call-pace train` | fit lookup, KNN, quantile (and a ticket lookup with `--amounts-csv`) into `artifacts/` |
 | `call-pace validate` | walk-forward table, k selection, promotion decisions, band coverage (`--per-bucket`) |
-| `call-pace projection` | end-of-day total: share formula against neighbour models |
+| `call-pace projection` | end-of-day total: share formula against neighbour models; `--extra-key weekday_pos` also tests whether a finer share-curve key earns its thinner cells |
 | `call-pace ablate features\|lookup\|covariate` | ablation studies |
 | `call-pace montecarlo` | retraining stress test under volume growth |
 | `call-pace pace` | print today's expected / actual / delta table as JSON |
@@ -264,7 +272,8 @@ It covers the data contract, feature engineering (including train/serve parity),
 walk-forward folds and promotion rules, projection, ablation, Monte Carlo reproducibility, the
 ticket lookup, the pace logic, the service failure policy, artifacts and caching, the CLI, the HTTP
 app and SQL query construction. Tests that train models take a few seconds each; the whole suite
-takes about a minute.
+(328 tests) took between one and two and a half minutes on the development machine,
+depending on load.
 
 ## Project layout
 
@@ -278,7 +287,7 @@ src/call_pace/
   artifacts.py  training.py                                runtime model files, train_models
   loaders/  memory.py  csv_loader.py  sqlserver.py
   cli.py  __main__.py
-tests/                                                     one file per module
+tests/                                                     one test module per area
 docs/  architecture.md  data-contract.md  evaluation.md  decisions.md  glossary.md
 ```
 
@@ -310,6 +319,9 @@ The full list with reasons is in [docs/decisions.md](docs/decisions.md). The one
 - **Small-sample models.** KNN and LightGBM here are tuned for hundreds of days of hourly counts. With
   little history or very sparse buckets the lookup baseline can be the right answer.
 - **Quantile bands are not calibrated** and have no band for the projected close.
+- **Covariate models cannot be served from the command line.** Training and validation accept
+  `--covariate`, but today's covariate value has to come from a Python `covariate_provider`, so
+  `pace` and `serve` refuse such models; use `PaceService` from the library.
 - **The Monte Carlo test depends on its assumptions** (stable intraday shape, independent days, fixed
   dispersion) and is not a forecast of real error.
 - **Artifacts are pickles.** Load only files your own training run wrote.

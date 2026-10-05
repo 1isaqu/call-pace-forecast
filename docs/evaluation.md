@@ -99,6 +99,20 @@ curve the formula is exact by construction and any similarity model is, at best,
 comparison is there so that a claim like "the learned model is better for the daily total" is checked
 rather than assumed.
 
+A second question is how finely the share curve should be keyed. `projection.compare_share_keys`
+(CLI: `call-pace projection --extra-key weekday_pos`) learns the median share per `(bucket, hour)`
+and per `(bucket, hour, extra key)` on the earlier days, projects the last `holdout_days` days with
+both and reports the error of each, a paired test and the decision. A row whose finer cell was never
+seen falls back to the coarser curve, and the number of such rows is printed. The finer key is
+recommended only if two conditions hold together:
+
+1. it lowers the held-out error by at least `min_gain_pct` (default 5 percent), and
+2. at most `max_thin_share` (default 10 percent) of its cells are thin, where a cell is thin when it
+   has fewer than `min_obs` training rows (default 5) or does not occur at all (`cell_sparsity`).
+
+A gain with thin cells is refused with that reason: a median over three days is a guess, and the
+gain is likely to be noise that will not repeat. Both thresholds are invented defaults.
+
 ## 6. Monte Carlo stress test
 
 `call-pace montecarlo` answers a different question from walk-forward: "if volume keeps growing and

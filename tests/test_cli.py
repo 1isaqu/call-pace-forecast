@@ -123,6 +123,20 @@ def test_projection_prints_a_table_per_hour_and_overall(workspace, capsys):
     assert main(["projection", *data_args(workspace), "--holdout-days", "15"]) == 0
     out = capsys.readouterr().out
     assert "mae_proportion" in out and "| all |" in out
+    assert "ADOPT" not in out and "KEEP" not in out  # the key comparison is opt-in
+
+
+def test_projection_can_also_test_a_finer_share_curve_key(workspace, capsys):
+    args = ["projection", *data_args(workspace), "--holdout-days", "15"]
+    assert main([*args, "--extra-key", "weekday_pos"]) == 0
+    out = capsys.readouterr().out
+    assert ("ADOPT bucket+hour+weekday_pos" in out) or ("KEEP bucket+hour" in out)
+    assert "cells of bucket+hour+weekday_pos" in out and "paired test" in out
+
+
+def test_projection_rejects_an_extra_key_that_does_not_exist(workspace, capsys):
+    assert main(["projection", *data_args(workspace), "--extra-key", "nope"]) == 2
+    assert "nope" in capsys.readouterr().err
 
 
 def test_ablate_features_prints_a_selection_and_a_ranked_table(workspace, capsys):
@@ -176,6 +190,17 @@ def test_pace_prints_json_for_a_replayed_moment(workspace, trained, capsys):
     assert main(args) == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["meta"]["in_operation"] is True and len(payload["data"]["bands"]) == 12
+
+
+def test_covariate_models_can_be_trained_but_not_served_from_the_command_line(tmp_path, capsys):
+    data, store = tmp_path / "cov.csv", tmp_path / "cov_artifacts"
+    main(["synth", "--out", str(data), "--days", "90", "--with-covariate"])
+    args = ["--csv", str(data), "--covariate", "days_since_event", "--artifacts", str(store)]
+    assert main(["train", *args, "--models", "lookup,knn"]) == 0
+    capsys.readouterr()
+    last_day = pd.read_csv(data)["date"].max()
+    assert main(["pace", *args, "--now", f"{last_day}T11:20:00"]) == 2
+    assert "covariate_provider" in capsys.readouterr().err
 
 
 def test_errors_are_reported_cleanly_with_a_non_zero_exit(workspace, trained, capsys):
