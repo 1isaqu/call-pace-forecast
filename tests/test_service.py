@@ -98,6 +98,16 @@ def test_an_unknown_bucket_is_a_bad_request_even_when_closed(make):
         make(hour=11).pace("nope")
 
 
+def test_a_serving_config_that_differs_from_training_is_rejected(make, routed):
+    for changes in (
+        {"start_hour": 9},
+        {"operating_weekdays": (0, 1, 2, 3)},
+        {"first_window_hours": 3},
+    ):
+        with pytest.raises(ConfigError, match="differs"):
+            make(config=routed.replace(**changes)).pace("auto")
+
+
 # --- an open day --------------------------------------------------------------------------
 
 

@@ -94,6 +94,7 @@ class PaceService:
         now = self._clock()
         buckets = self._resolve(bucket)
         spec = self.store.spec()
+        self._check_consistent(spec)
         if not self._in_operation(now, spec):
             return self._empty(now, bucket, buckets, in_operation=False)
         self._require_covariates(spec)
@@ -122,6 +123,28 @@ class PaceService:
     def _in_operation(now: datetime, spec: FeatureSpec) -> bool:
         open_hour = spec.start_hour <= now.hour <= spec.end_hour
         return open_hour and weekday_position(now.date(), spec.weekdays) is not None
+
+    def _check_consistent(self, spec: FeatureSpec) -> None:
+        """The serving configuration must describe the same day the models were trained on."""
+        mine = (
+            self.config.start_hour,
+            self.config.end_hour,
+            tuple(self.config.operating_weekdays),
+            self.config.first_window_hours,
+            tuple(self.config.covariates),
+        )
+        trained = (
+            spec.start_hour,
+            spec.end_hour,
+            spec.weekdays,
+            spec.first_window_hours,
+            spec.covariates,
+        )
+        if mine != trained:
+            raise ConfigError(
+                "the serving configuration (hours, weekdays, first-window hours, covariates) "
+                "differs from the one the models were trained with"
+            )
 
     def _require_covariates(self, spec: FeatureSpec) -> None:
         if spec.covariates and self.covariate_provider is None:

@@ -94,11 +94,16 @@ class ArtifactStore:
         return model.save(self.path(kind))
 
     def load(self, kind: str) -> Any:
-        """Load a model, cached for the store's TTL. Raises ArtifactError when it is missing."""
+        """Load a model, cached for the store's TTL. Raises ArtifactError when it is missing.
+
+        The cache key includes the file's modification time, so a model retrained by another
+        process is picked up on the next call instead of after the TTL.
+        """
         path = self.path(kind)
         if not path.is_file():
             raise ArtifactError(f"no {kind} artifact at {path}; train first (call-pace train)")
-        return self._cache.get_or_load(("model", kind), lambda: _LOADERS[kind](path))
+        key = ("model", kind, path.stat().st_mtime_ns)
+        return self._cache.get_or_load(key, lambda: _LOADERS[kind](path))
 
     def write_manifest(self, spec: FeatureSpec, summary: Mapping[str, Any] | None = None) -> Path:
         """Record the feature layout and what was trained, next to the models."""
@@ -121,7 +126,9 @@ class ArtifactStore:
         path = self.directory / MANIFEST_FILE
         if not path.is_file():
             raise ArtifactError(f"no manifest at {path}; train first (call-pace train)")
-        return self._cache.get_or_load(("manifest",), lambda: _read_manifest(path))
+        return self._cache.get_or_load(
+            ("manifest", path.stat().st_mtime_ns), lambda: _read_manifest(path)
+        )
 
     def spec(self) -> FeatureSpec:
         return FeatureSpec.from_dict(self.manifest()["spec"])

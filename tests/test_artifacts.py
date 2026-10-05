@@ -80,6 +80,7 @@ def models(frame, spec, config, hourly):
     from call_pace.synthetic import make_synthetic_amounts
 
     return {
+        "lookup_frame": frame,
         "lookup": LookupForecaster(30).fit(frame),
         "knn": KnnForecaster(spec, 5).fit(frame),
         "quantile": QuantileForecaster(spec, params=config.lgbm_params).fit(frame),
@@ -114,6 +115,16 @@ def test_loaded_models_are_cached_until_the_ttl_expires(tmp_path, models):
     assert store.load("lookup") is first
     clock.now = 11
     assert store.load("lookup") is not first
+
+
+def test_a_model_retrained_by_another_process_is_picked_up_before_the_ttl(tmp_path, models):
+    clock = Clock()
+    serving = ArtifactStore(tmp_path, ttl_seconds=10_000, clock=clock)
+    serving.save("lookup", models["lookup"])
+    before = serving.load("lookup")
+    ArtifactStore(tmp_path).save("lookup", LookupForecaster(5).fit(models["lookup_frame"]))
+    after = serving.load("lookup")
+    assert after is not before and after.window_days == 5
 
 
 def test_saving_again_invalidates_the_cache(tmp_path, models):

@@ -124,6 +124,15 @@ def test_aggregation_rounds_money():
     assert merged[0].expected == 2.01 and merged[0].actual == 2.0
 
 
+def test_aggregation_rounds_money_for_hours_that_have_not_closed_too():
+    """Summing floats leaves noise such as 0.30000000000000004; money must show whole cents."""
+    a = build_bands([0.1] * 12, {}, 8, HOURS, digits=2)
+    b = build_bands([0.2] * 12, {}, 8, HOURS, digits=2)
+    assert 0.1 + 0.2 != 0.3  # the premise: the raw float sum is noisy
+    merged = aggregate_bands([a, b], digits=2)
+    assert all(m.expected == 0.3 for m in merged)
+
+
 def test_totals_actual_expected_and_projected_close():
     bands = build_bands([4.0] * 12, {8: 6, 9: 2}, 10, HOURS)
     totals = summarize(bands)

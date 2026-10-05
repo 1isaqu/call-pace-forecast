@@ -128,9 +128,8 @@ def aggregate_bands(per_bucket: Sequence[Sequence[Band]], digits: int | None = N
         expected = sum(b.expected for b in hour_bands)
         closed = [b for b in hour_bands if b.actual is not None]
         if not closed:
-            merged.append(
-                Band(hour_bands[0].hour, expected, None, None, hour_bands[0].status, None)
-            )
+            shown = expected if digits is None else round(expected, digits)
+            merged.append(Band(hour_bands[0].hour, shown, None, None, hour_bands[0].status, None))
             continue
         actual = sum(b.actual for b in closed)
         cumulative = sum(b.cumulative for b in hour_bands if b.cumulative is not None)
