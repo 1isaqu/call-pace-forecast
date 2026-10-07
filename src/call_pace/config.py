@@ -1,6 +1,6 @@
 """Central configuration.
 
-Every number here is an invented default chosen for a small synthetic example. None of them
+Every number here is a default chosen for a small synthetic example. None of them
 is calibrated on real data: window lengths, cut-offs, fold sizes and k grids must be tuned on
 your own history (see docs/evaluation.md).
 """

@@ -6,9 +6,9 @@ For every hour of the operating day the output is:
     actual     what it produced (known once the hour has closed)
     delta      actual - expected
 
-The triad is the product. It is also the explanation: a manager can see the reasoning without
-reading a model. Better models only make `expected` more accurate; the shape of the answer
-never changes. This module is pure logic with no framework, I/O or model imports.
+Each of the three numbers can be checked by hand, so the table can be read without knowing the
+model. Better models only make `expected` more accurate; the shape of the answer never changes.
+This module is pure logic with no framework, I/O or model imports.
 
 Status of an hour:
     above        closed, actual > expected

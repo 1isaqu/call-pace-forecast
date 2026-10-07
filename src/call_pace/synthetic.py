@@ -115,7 +115,7 @@ def make_synthetic_amounts(
     median_amount: Mapping[str, float] | None = None,
     sigma: float = 0.8,
 ) -> pd.DataFrame:
-    """One row per counted event with a log-normal amount (heavy right tail, like real tickets)."""
+    """One row per counted event with a log-normal amount (heavy right tail)."""
     rng = np.random.default_rng(seed)
     medians = dict(median_amount or _default_tickets())
     repeats = hourly["count"].round().astype(int).to_numpy()
