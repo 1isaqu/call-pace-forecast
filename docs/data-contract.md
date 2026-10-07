@@ -124,7 +124,7 @@ does not query them.
 
 | metric | Counts |
 |---|---|
-| `agreements` | `COUNT(DISTINCT agreement_id)` of first installments whose status is in the generated set |
+| `agreements` | first installments whose status is in the generated set, one row kept per `(agreement_id, portfolio_id, installment_no)` |
 | `outreach` | every row of `contact_events` |
 | `answers` | attempts whose result has `answered = 1` |
 | `cpc` | attempts whose result has `answered = 1 AND right_party = 1` (right-party contact) |
@@ -152,9 +152,11 @@ breaking is a later outcome, not a reason the agreement was not generated that d
 - Read-only: only `SELECT`, and the connection is opened with `readonly=True` and
   `ApplicationIntent=ReadOnly`.
 - First installment: `installment_no = 0` (`SqlOptions.first_installment_no`).
-- Deduplication: the same installment can be re-written by a system error. Amount queries keep
-  the latest row per `(agreement_id, portfolio_id, installment_no)` and apply every business
-  filter inside the derived table, before `ROW_NUMBER()`. Count queries use `COUNT(DISTINCT)`.
+- Deduplication: the same installment can be re-written by a system error. The count and the
+  amount queries both keep the latest row per `(agreement_id, portfolio_id, installment_no)` and
+  apply every business filter inside the derived table, before `ROW_NUMBER()`. A re-written
+  installment is therefore counted once, in the hour of its newest row. Rows with the same
+  `issued_at` tie, and the server picks one of them arbitrarily.
 - Excluded agents: `SqlOptions.excluded_agent_patterns` (default `system%`, `test%`), `LIKE`
   patterns matched case-insensitively against `login` and `display_name`, applied in SQL.
 - `WITH (NOLOCK)` on every table by default (`use_nolock=False` to disable). It avoids blocking

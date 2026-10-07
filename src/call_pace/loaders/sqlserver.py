@@ -90,59 +90,22 @@ def _day_bounds(start: date, end: date) -> tuple[datetime, datetime]:
     return datetime.combine(start, time.min), datetime.combine(end + timedelta(days=1), time.min)
 
 
-def hourly_agreements_query(
-    options: SqlOptions, start: date, end: date, start_hour: int, end_hour: int
-) -> Query:
-    """Agreements generated per day and hour: DISTINCT agreement ids on first installments.
+def _latest_first_installments(
+    options: SqlOptions, start: date, end: date, start_hour: int, end_hour: int, columns: str
+) -> tuple[str, tuple[Any, ...]]:
+    """FROM clause and parameters: one row per (agreement_id, portfolio_id, installment_no).
 
-    Counting distinct agreement ids makes the count immune to re-written installment rows.
+    The same installment can be re-written, so rows are ranked by `issued_at`, newest first, and
+    only the newest is kept. Every business filter is inside the derived table, before the
+    ranking. Rows with the same `issued_at` tie, and the server picks one of them arbitrarily.
+    `columns` lists what the outer query reads from the derived table `r`.
     """
     low, high = _day_bounds(start, end)
     agents, agent_values = excluded_agents_clause(options.excluded_agent_patterns)
     hint = _hint(options)
     sql = f"""
-SELECT CAST(a.issued_at AS DATE) AS [date],
-       DATEPART(HOUR, a.issued_at) AS [hour],
-       COUNT(DISTINCT a.agreement_id) AS [count]
-FROM agreements AS a{hint}
-JOIN agents AS u{hint} ON u.agent_id = a.agent_id
-WHERE a.issued_at >= ? AND a.issued_at < ?
-  AND a.status_id IN ({_placeholders(len(options.generated_status_ids))})
-  AND a.installment_no = ?
-  AND DATEPART(HOUR, a.issued_at) BETWEEN ? AND ?
-      {agents}
-GROUP BY CAST(a.issued_at AS DATE), DATEPART(HOUR, a.issued_at)
-ORDER BY [date], [hour]
-""".strip()
-    params = (
-        low,
-        high,
-        *options.generated_status_ids,
-        options.first_installment_no,
-        start_hour,
-        end_hour,
-        *agent_values,
-    )
-    return Query(sql, params)
-
-
-def agreement_amounts_query(
-    options: SqlOptions, start: date, end: date, start_hour: int, end_hour: int
-) -> Query:
-    """One row per generated agreement with its first-installment amount.
-
-    Re-written installments are collapsed before any amount is read: duplicates would otherwise
-    be counted twice in a SUM. Every business filter is inside the derived table.
-    """
-    low, high = _day_bounds(start, end)
-    agents, agent_values = excluded_agents_clause(options.excluded_agent_patterns)
-    hint = _hint(options)
-    sql = f"""
-SELECT CAST(r.issued_at AS DATE) AS [date],
-       DATEPART(HOUR, r.issued_at) AS [hour],
-       r.amount AS [amount]
 FROM (
-    SELECT a.issued_at, a.amount,
+    SELECT {columns},
            ROW_NUMBER() OVER (
                PARTITION BY a.agreement_id, a.portfolio_id, a.installment_no
                ORDER BY a.issued_at DESC
@@ -155,9 +118,7 @@ FROM (
       AND DATEPART(HOUR, a.issued_at) BETWEEN ? AND ?
       {agents}
 ) AS r
-WHERE r.rn = 1
-ORDER BY [date], [hour]
-""".strip()
+WHERE r.rn = 1""".strip()
     params = (
         low,
         high,
@@ -167,6 +128,49 @@ ORDER BY [date], [hour]
         end_hour,
         *agent_values,
     )
+    return sql, params
+
+
+def hourly_agreements_query(
+    options: SqlOptions, start: date, end: date, start_hour: int, end_hour: int
+) -> Query:
+    """Agreements generated per day and hour, counted on first installments.
+
+    One row is kept per (agreement_id, portfolio_id, installment_no) before counting, so a
+    re-written installment is counted once, in the hour of its newest row.
+    """
+    source, params = _latest_first_installments(
+        options, start, end, start_hour, end_hour, "a.issued_at"
+    )
+    sql = f"""
+SELECT CAST(r.issued_at AS DATE) AS [date],
+       DATEPART(HOUR, r.issued_at) AS [hour],
+       COUNT(*) AS [count]
+{source}
+GROUP BY CAST(r.issued_at AS DATE), DATEPART(HOUR, r.issued_at)
+ORDER BY [date], [hour]
+""".strip()
+    return Query(sql, params)
+
+
+def agreement_amounts_query(
+    options: SqlOptions, start: date, end: date, start_hour: int, end_hour: int
+) -> Query:
+    """One row per generated agreement with its first-installment amount.
+
+    Re-written installments are collapsed before any amount is read: duplicates would otherwise
+    be counted twice in a SUM. Every business filter is inside the derived table.
+    """
+    source, params = _latest_first_installments(
+        options, start, end, start_hour, end_hour, "a.issued_at, a.amount"
+    )
+    sql = f"""
+SELECT CAST(r.issued_at AS DATE) AS [date],
+       DATEPART(HOUR, r.issued_at) AS [hour],
+       r.amount AS [amount]
+{source}
+ORDER BY [date], [hour]
+""".strip()
     return Query(sql, params)
 
 

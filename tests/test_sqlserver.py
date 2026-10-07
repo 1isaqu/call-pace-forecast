@@ -89,8 +89,9 @@ def test_every_table_has_the_nolock_hint_and_it_can_be_turned_off():
         assert "NOLOCK" not in query.sql
 
 
-def test_amounts_query_filters_before_ranking_and_keeps_one_row_per_installment():
-    query = agreement_amounts_query(SqlOptions(), *ARGS)
+@pytest.mark.parametrize("builder", [agreement_amounts_query, hourly_agreements_query])
+def test_agreement_queries_filter_before_ranking_and_keep_one_row_per_installment(builder):
+    query = builder(SqlOptions(), *ARGS)
     inner, _, outer = query.sql.partition("\n) AS r\n")
     assert "PARTITION BY a.agreement_id, a.portfolio_id, a.installment_no" in inner
     assert "ORDER BY a.issued_at DESC" in inner
@@ -99,10 +100,21 @@ def test_amounts_query_filters_before_ranking_and_keeps_one_row_per_installment(
     assert outer.strip().startswith("WHERE r.rn = 1")
 
 
-def test_agreement_counts_use_distinct_ids_so_rewrites_cannot_inflate_them():
+def test_agreement_counts_count_ranked_rows_so_rewrites_cannot_inflate_them():
     sql = hourly_agreements_query(SqlOptions(), *ARGS).sql
-    assert "COUNT(DISTINCT a.agreement_id)" in sql
-    assert "GROUP BY CAST(a.issued_at AS DATE), DATEPART(HOUR, a.issued_at)" in sql
+    assert "COUNT(*) AS [count]" in sql and "DISTINCT" not in sql
+    assert "GROUP BY CAST(r.issued_at AS DATE), DATEPART(HOUR, r.issued_at)" in sql
+
+
+def test_counts_and_amounts_rank_the_same_rows():
+    count = hourly_agreements_query(SqlOptions(), *ARGS)
+    amounts = agreement_amounts_query(SqlOptions(), *ARGS)
+
+    def ranked_source(sql):
+        return sql[sql.index("ROW_NUMBER()") : sql.index("WHERE r.rn = 1")]
+
+    assert count.params == amounts.params
+    assert ranked_source(count.sql) == ranked_source(amounts.sql)
 
 
 def test_event_metrics_differ_only_in_the_result_flags():
