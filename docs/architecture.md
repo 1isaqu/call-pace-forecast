@@ -8,9 +8,9 @@ For every hour of the operating day the system shows three numbers:
 |---|---|---|
 | what the model says this hour should produce | what it produced (known when the hour closes) | actual minus expected |
 
-The triad is also the explanation: a manager sees the reasoning without reading a model. Models
-only make `expected` more accurate. The shape of the answer never changes, which is why the
-forecasting method can be upgraded in phases without touching any consumer.
+Each of the three numbers can be checked by hand, so the table can be read without knowing the
+model. Models only make `expected` more accurate. The shape of the answer never changes, which is
+why the forecasting method can be upgraded in phases without touching any consumer.
 
 ## Three phases
 
@@ -47,12 +47,12 @@ A model is promoted only through the walk-forward protocol in [evaluation.md](ev
 
 | Module | Responsibility |
 |---|---|
-| `config` | One frozen `Config`: calendar, post-processing, window and cut-offs, k grid, quantiles, fold sizes, routing. All defaults are invented. `from_env()` reads `CALL_PACE_*`. |
+| `config` | One frozen `Config`: calendar, post-processing, window and cut-offs, k grid, quantiles, fold sizes, routing. All defaults were chosen for the synthetic example. `from_env()` reads `CALL_PACE_*`. |
 | `contract` | The data contract, `validate_hourly` / `validate_amounts`, the loader protocols. |
 | `features` | `FeatureSpec` (persisted with each model), `build_frame` (training) and `serving_frame` (one day, as known now). Both paths use the same helpers. |
 | `baseline`, `knn`, `quantile` | The three phases. Each has `fit`, `predict`, `save`, `load`. |
 | `projection` | End-of-day total: share formula versus neighbour models, and whether a finer share-curve key earns its thinner cells (`cell_sparsity`, `compare_share_keys`). |
-| `value` | Ticket lookup, `expected_value`, honest configuration search. |
+| `value` | Ticket lookup, `expected_value`, configuration search on the early folds confirmed on the last. |
 | `metrics`, `validation` | Post-processing alignment, MAE, directional accuracy, coverage, WAPE, folds, walk-forward, promotion rules, paired test. |
 | `ablation` | Feature subsets, lookup variants, covariate signal report. |
 | `montecarlo`, `synthetic` | Retraining stress test; invented data generator. |
@@ -62,33 +62,33 @@ A model is promoted only through the walk-forward protocol in [evaluation.md](ev
 | `loaders/*` | In-memory, CSV and SQL Server loaders. |
 | `cli` | `call-pace` commands. |
 
-## Design properties worth knowing
+## Design properties
 
-- **One feature path.** Training builds features from a whole history; serving builds them for
-  one day at the current hour. Both use the same helpers, and a test replays a past day hour by
-  hour and checks that the served features equal the training features.
-- **Leakage guards.** `cumulative_lag` excludes the hour being predicted. `first_window_total` is
-  zero until the first hours of the day have closed.
-- **Models are routed per bucket.** `Config.routing` (env `CALL_PACE_ROUTING`) maps a bucket to
-  `lookup`, `knn` or `quantile`; `default_model` covers the rest. A bucket whose lookup is zero in
-  nearly every hour cannot flag a shortfall, so `LookupForecaster.is_informative` exists as the
-  review trigger for choosing a model that reacts to the day so far.
-- **Failure policy** (`service.py`). A bad request always propagates. A missing model is an error.
-  Any failure while reading today's data returns a well-formed payload with empty bands and a
-  message in `errors`, so a display that polls the endpoint does not go blank.
-- **Caching.** Today's data is cached for `data_ttl_seconds` (default 30) to protect the source
-  from polling bursts; loaded models are cached for `artifact_ttl_seconds` (default 24 hours).
-  Both use one lock-protected `TtlCache`, so concurrent requests trigger one load. The model cache
-  key includes each file's modification time, so a retrained model is served from the next request
-  on, without waiting for the TTL or restarting the service.
-- **Artifacts live at runtime only.** `train` writes `artifacts/` (gitignored): `lookup.json`,
-  `knn.joblib`, `quantile.joblib`, `ticket.json`, `manifest.json`. Nothing fitted is committed.
-  `joblib` is pickle based, so load only artifacts you produced yourself.
-- **Future bands are conditioned, not rolled forward.** Expected counts for hours that have not
-  started use the cumulative reached so far; they are not recomputed from earlier predictions.
-- **No interval on the projected close.** The close is `actual so far + expected for the open
-  hours`, a point estimate. Summing per-hour quantile bounds does not give a bound on the sum, so
-  the library does not report one, and `aggregate_bands` drops bounds when it adds buckets.
+- Training builds features from a whole history; serving builds them for one day at the current
+  hour. Both use the same helpers, and a test replays a past day hour by hour and checks that the
+  served features equal the training features.
+- `cumulative_lag` excludes the hour being predicted, and `first_window_total` is zero until the
+  first hours of the day have closed.
+- `Config.routing` (env `CALL_PACE_ROUTING`) maps a bucket to `lookup`, `knn` or `quantile`;
+  `default_model` covers the rest. A bucket whose lookup is zero in nearly every hour cannot flag a
+  shortfall, so `LookupForecaster.is_informative` exists as the review trigger for choosing a model
+  that reacts to the day so far.
+- In `service.py` a bad request always propagates and a missing model is an error. Any failure
+  while reading today's data returns a well-formed payload with empty bands and a message in
+  `errors`, so a display that polls the endpoint does not go blank.
+- Today's data is cached for `data_ttl_seconds` (default 30) to protect the source from polling
+  bursts, and loaded models are cached for `artifact_ttl_seconds` (default 24 hours). Both use one
+  lock-protected `TtlCache`, so concurrent requests trigger one load. The model cache key includes
+  each file's modification time, so a retrained model is served from the next request on, without
+  waiting for the TTL or restarting the service.
+- `train` writes `artifacts/` (gitignored) at runtime: `lookup.json`, `knn.joblib`,
+  `quantile.joblib`, `ticket.json`, `manifest.json`. Nothing fitted is committed. `joblib` is
+  pickle based, so load only artifacts you produced yourself.
+- Expected counts for hours that have not started use the cumulative reached so far; they are not
+  recomputed from earlier predictions.
+- The projected close is `actual so far + expected for the open hours`, a point estimate. Summing
+  per-hour quantile bounds does not give a bound on the sum, so the library does not report an
+  interval, and `aggregate_bands` drops bounds when it adds buckets.
 
 ## Extension points
 

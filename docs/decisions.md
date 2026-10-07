@@ -1,7 +1,8 @@
 # Key decisions
 
 Each entry states the choice, the reason and, where it matters, what was rejected. The numbers
-that appear in code are invented defaults, not results from any real system.
+that appear in code are defaults chosen for the synthetic example, not results from any real
+system.
 
 ## Modelling
 
@@ -10,16 +11,16 @@ The expected count for an hour is the median of what that (bucket, hour) produce
 nothing to overfit and it is trivially explainable. Skipping it makes it impossible to say whether a
 complicated model is worth its cost.
 
-**2. The hour is a partition key, not a distance dimension.**
+**2. The hour is a partition key in the lookup.**
 In the lookup the hour matches exactly. Putting it into a distance with several other features
 dilutes it: the neighbours of a 10 o'clock row stop being 10 o'clock rows. The KNN does take the hour
 as a feature (scaled like the others), but the end-of-day projection experiment compares both forms
 (`NeighborProjector` modes `hour_partition` and `hour_feature`) so the effect can be measured.
 
-**3. Median, not mean.**
-Daily volumes contain outlier days. The median shrugs them off; alternatives (winsorising, capping,
-log scale) are available through `central_estimate` and compared by `compare_lookup_variants`
-instead of assumed.
+**3. The lookup uses the median.**
+Daily volumes contain outlier days, and the median is barely moved by them. Alternatives
+(winsorising, capping, log scale) are available through `central_estimate` and compared by
+`compare_lookup_variants` instead of assumed.
 
 **4. Evaluate under the serving rounding.**
 Offline metrics are computed after `ceil`-and-clip, the same transformation the display applies.
@@ -42,8 +43,8 @@ if it brings information the formula ignores. The library therefore ships the fo
 
 **8. Prefer a trailing window to all history.**
 Volume regimes shift. A model fitted on the entire past can be worse than one fitted on the recent
-past. `lookup_window_days` is a parameter (invented default) that should be chosen by walk-forward on
-your own data.
+past. `lookup_window_days` is a parameter (its default was chosen for the synthetic example) that
+should be chosen by walk-forward on your own data.
 
 **9. Maturity cut-off for recent days.**
 The newest days of a source can be incomplete because records arrive late. `maturity_cutoff_days`
@@ -56,7 +57,7 @@ never signal a shortfall. `LookupForecaster.is_informative(bucket, min_nonzero_h
 trigger. Per-bucket routing (`Config.routing`) lets a high-volume bucket use one model while a sparse
 one uses another, and `validate --per-bucket` provides the evidence.
 
-**11. Value is count times a typical ticket, not a second model.**
+**11. Value is count times a typical ticket.**
 Amounts are heavy tailed; a learned amount model is dominated by a few large events. The decomposition
 reuses whatever count model is deployed and adds a lookup of recent tickets (median or winsorised
 mean, bucket or hour-by-bucket, trailing window, maturity cut-off, fallback to the bucket value for
@@ -82,7 +83,7 @@ claims 50 percent and delivers 85 percent is mis-specified in a way a user must 
 Shuffled cross-validation leaks the future into the past. Choosing k on the same fold that is reported
 inflates the result. See [evaluation.md](evaluation.md).
 
-**15. Promotion tolerates noise in two currencies at once.**
+**15. A fold is a regression only if it is worse by both margins.**
 A fold is a regression only if it is worse by more than an absolute and a relative tolerance. A purely
 relative rule fails on small-volume folds; a purely absolute one on large-volume ones.
 
@@ -90,7 +91,7 @@ relative rule fails on small-volume folds; a purely absolute one on large-volume
 Promotion is expressed as improvement over the baseline, not as a fixed MAE, because the same code
 serves series of very different volume.
 
-**17. Monte Carlo as a policy test, not a forecast.**
+**17. Monte Carlo tests the retraining policy; it does not forecast error.**
 It varies growth under stated assumptions to see how the retraining policy behaves, and says so.
 
 ## Serving
@@ -126,7 +127,7 @@ The "keep the latest row per installment" step ranks rows. A filter applied afte
 let a re-written row with a non-qualifying status win and hide the valid one, so every business filter
 (status set, first installment, hours, excluded agents) is applied before `ROW_NUMBER()`.
 
-**24. `NOLOCK` is a trade-off, not a default to forget.**
+**24. `NOLOCK` is on by default and can be switched off.**
 It keeps analytical reads from blocking writers and allows reading uncommitted rows. It is on by
 default and can be turned off.
 
@@ -136,7 +137,7 @@ name is NULL, because `NULL NOT LIKE ...` is unknown and would otherwise drop th
 
 ## Repository
 
-**26. No data, no fitted artifacts, ever.**
+**26. The repository holds no data and no fitted artifacts.**
 `.gitignore` excludes data files and model files; `train` writes into an ignored directory.
 Everything the tests and the quick start use is generated by `call_pace.synthetic`.
 
