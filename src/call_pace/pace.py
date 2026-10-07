@@ -118,7 +118,8 @@ def aggregate_bands(per_bucket: Sequence[Sequence[Band]], digits: int | None = N
     """Sum the bands of several buckets hour by hour.
 
     Quantile bounds are dropped: the sum of per-bucket bounds is not a bound on the sum.
-    The status of a not-yet-closed hour comes from the first bucket; a closed hour is
+    A not-yet-closed hour is `in_progress` when any bucket reports it so and `future` otherwise,
+    because a bucket with no rows today reports its current hour as `future`. A closed hour is
     re-classified from the aggregate delta.
     """
     if len(per_bucket) == 1:
@@ -129,7 +130,9 @@ def aggregate_bands(per_bucket: Sequence[Sequence[Band]], digits: int | None = N
         closed = [b for b in hour_bands if b.actual is not None]
         if not closed:
             shown = expected if digits is None else round(expected, digits)
-            merged.append(Band(hour_bands[0].hour, shown, None, None, hour_bands[0].status, None))
+            running = any(b.status == IN_PROGRESS for b in hour_bands)
+            status = IN_PROGRESS if running else FUTURE
+            merged.append(Band(hour_bands[0].hour, shown, None, None, status, None))
             continue
         actual = sum(b.actual for b in closed)
         cumulative = sum(b.cumulative for b in hour_bands if b.cumulative is not None)
