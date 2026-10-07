@@ -42,7 +42,7 @@ number, so offline and online must use the same rounding.
 
 | Metric | Definition | Notes |
 |---|---|---|
-| MAE | mean of `abs(actual - predicted)` per hour | Primary metric. Robust to the small denominators of hourly counts, unlike MAPE. |
+| MAE | mean of `abs(actual - predicted)` per hour | Primary metric. It does not divide by the actual, so it stays defined for hours with zero events, unlike MAPE. |
 | Directional accuracy | share of hours where `sign(model - baseline) == sign(actual - baseline)` | Hours where the actual equals the baseline carry no direction and are dropped. It answers: when the model moves away from the baseline, is it moving the way reality moves? |
 | Coverage | share of actual values inside `[lower, upper]` | Compare to the nominal coverage, `upper quantile - lower quantile`. |
 | Band width | mean of `upper - lower` | A band that is too wide is "calibrated" and useless. Read together with coverage. |

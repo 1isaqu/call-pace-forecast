@@ -5,8 +5,9 @@ events. The decomposition reuses the count model and needs only a ticket lookup:
 
     expected value of an hour = expected count of that hour x typical ticket
 
-The count comes from any of the count models. The ticket is a plain lookup (a robust central
-value of recent event amounts), the same family as the baseline, with no trainable model.
+The count comes from any of the count models. The ticket is a plain lookup (the median of
+recent event amounts, or a winsorised mean), the same family as the baseline, with no
+trainable model.
 
 Design choices:
   * the median is the default estimator; a winsorised mean is the alternative for heavy tails;
