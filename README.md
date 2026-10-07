@@ -273,8 +273,8 @@ It covers the data contract, feature engineering (including train/serve parity),
 walk-forward folds and promotion rules, projection, ablation, Monte Carlo reproducibility, the
 ticket lookup, the pace logic, the service failure policy, artifacts and caching, the CLI, the HTTP
 app and SQL query construction. Tests that train models take a few seconds each; the whole suite
-(331 tests) took between one and two and a half minutes on the development machine,
-depending on load.
+(331 tests) took between two and three minutes on the development machine, depending on
+load.
 
 ## Project layout
 
