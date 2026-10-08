@@ -2,32 +2,32 @@
 
 Intraday forecasting of cumulative outreach or agreement volume. For every hour of the operating
 day it answers "is the operation on pace?" with three numbers: what was expected, what happened and
-the difference. Expectations come from three phases that can be compared honestly: a lookup
-baseline, KNN regression on time-of-day curves, and LightGBM quantile bands. Models are evaluated
-with a walk-forward protocol that never lets the future leak into the past, and a Monte Carlo
-stress test shows how a monthly retraining policy behaves under volume growth.
+the difference. Expectations come from three phases scored with the same walk-forward protocol: a
+lookup baseline, KNN regression on time-of-day curves, and LightGBM quantile bands. The protocol
+never lets the future leak into the past, and a Monte Carlo stress test shows how a monthly
+retraining policy behaves under volume growth.
 
 It is a library, a command line and an optional HTTP endpoint. It contains no data and no fitted
 models: you connect your own data through a small, documented contract.
 
-## What it does and why it is interesting
+## What it does
 
-- **A baseline that has to be beaten.** The expected count for an hour is the median of what that
-  (bucket, hour) produced recently. Challengers are judged against it by explicit, scale-relative
-  promotion rules that tolerate a noisy fold.
-- **Features built to avoid leakage.** The volume so far is the total *before* the hour being predicted, and
-  the early-morning total is hidden until it has closed. Training and serving build features through
-  the same code, and a test replays a past day hour by hour to prove they agree.
-- **Honest evaluation.** Expanding-window walk-forward; k is chosen on early folds; the last fold is a
-  holdout that is looked at once. Metrics are computed after the same rounding the display applies.
-- **Uncertainty you can check.** The quantile model reports a band per hour and the tool prints the
-  nominal and the empirical coverage so you can see whether the band can be trusted.
-- **Experiments as code.** Feature-subset search, lookup variants, a covariate signal test, an
-  end-of-day projection comparison (a formula against neighbour models), a finer-key test that
-  weighs a gain against how thin the cells become, and a ticket-lookup search for an expected-value
-  forecast.
-- **A serving layer with a failure policy.** Bad requests raise, missing models raise, but a failing
-  data source degrades to an empty, well-formed payload so a polling display keeps working.
+- The expected count for an hour is the median of what that (bucket, hour) produced recently. KNN
+  and LightGBM have to beat it under scale-relative promotion rules that tolerate one noisy fold.
+- The volume so far is the total before the hour being predicted, and the early-morning total is
+  hidden until it has closed. Training and serving build features through the same code, and a test
+  replays a past day hour by hour to check that they agree.
+- Walk-forward evaluation with an expanding window. k is chosen on the early folds and the last fold
+  is a holdout that is looked at once. Metrics are computed after the same rounding the display
+  applies.
+- The quantile model reports a band per hour, and the tool prints the nominal and the empirical
+  coverage so you can see whether the band can be trusted.
+- The experiments are included as code: feature-subset search, lookup variants, a covariate signal
+  test, an end-of-day projection comparison (a formula against neighbour models), a finer-key test
+  that weighs a gain against how thin the cells become, and a ticket-lookup search for an
+  expected-value forecast.
+- Bad requests raise and missing models raise, but a failing data source degrades to an empty,
+  well-formed payload so a polling display keeps working.
 
 ## Architecture
 
@@ -41,7 +41,7 @@ models: you connect your own data through a small, documented contract.
                                                +--> train_models --> artifacts/ + manifest.json
                                                                            |
  request --> PaceService.pace(bucket) <------------------------------------+   serving (online)
-               - outside operating hours: empty payload, no I/O
+               - outside operating hours: empty payload, no model or data reads
                - load models routed to the bucket (lookup | knn | quantile)
                - read today's counts (cached 30 s), build features for the current hour
                - expected / actual / delta per hour, aggregate buckets, projected close
@@ -107,8 +107,9 @@ KEEP BASELINE: quantile
   [fail] improvement: holdout MAE 1.083 vs baseline 0.908 (-19.3%), need >= 5.0%
 ```
 
-The synthetic data has one high-volume bucket and one sparse bucket on purpose: the more complex
-models help on the first and not on the second, which is exactly what per-bucket decisions are for.
+The synthetic data has one high-volume bucket and one sparse bucket. In this run the quantile model
+is promoted on the high-volume bucket and the KNN is not, and neither challenger beats the lookup on
+the sparse one, which is why decisions are made per bucket.
 
 The serving payload of `call-pace pace` (abridged; real output on the synthetic data, seed 7):
 
@@ -219,7 +220,7 @@ an absolute and a relative tolerance). See [docs/evaluation.md](docs/evaluation.
 
 ## Configuration
 
-`Config` is a frozen dataclass. Every default is invented for the synthetic example and must be
+`Config` is a frozen dataclass. Every default was chosen for the synthetic example and has to be
 calibrated on your own data.
 
 | Field | Default | Meaning |
@@ -272,8 +273,8 @@ It covers the data contract, feature engineering (including train/serve parity),
 walk-forward folds and promotion rules, projection, ablation, Monte Carlo reproducibility, the
 ticket lookup, the pace logic, the service failure policy, artifacts and caching, the CLI, the HTTP
 app and SQL query construction. Tests that train models take a few seconds each; the whole suite
-(328 tests) took between one and two and a half minutes on the development machine,
-depending on load.
+(331 tests) took between two and three minutes on the development machine, depending on
+load.
 
 ## Project layout
 
@@ -285,7 +286,7 @@ src/call_pace/
   validation.py  ablation.py  montecarlo.py  synthetic.py  evaluation and experiments
   pace.py  service.py  api.py                              serving
   artifacts.py  training.py                                runtime model files, train_models
-  loaders/  memory.py  csv_loader.py  sqlserver.py
+  loaders/  common.py  memory.py  csv_loader.py  sqlserver.py
   cli.py  __main__.py
 tests/                                                     one test module per area
 docs/  architecture.md  data-contract.md  evaluation.md  decisions.md  glossary.md
@@ -297,7 +298,8 @@ The full list with reasons is in [docs/decisions.md](docs/decisions.md). The one
 
 - The hour is an exact partition key in the lookup, not a distance dimension.
 - Offline metrics use the serving rounding, so a ranking cannot flip between lab and display.
-- Promotion is relative to the baseline and tolerates noise in two currencies at once.
+- A fold counts against a challenger only if it is worse than the baseline by both an absolute and
+  a relative margin.
 - A formula beats a similarity model for the day total unless the model brings new information.
 - Routing is per bucket, and the review trigger for a sparse bucket is explicit.
 - Value is expected count times a typical ticket, with an error instead of an invented ticket when
@@ -307,26 +309,27 @@ The full list with reasons is in [docs/decisions.md](docs/decisions.md). The one
 
 ## Limitations
 
-- **Not validated on real data.** Every number in the documentation and the defaults is invented.
-  Window lengths, cut-offs, fold sizes, k grids, thresholds and Monte Carlo parameters must be
-  calibrated on your own history.
-- **The SQL Server adapter has never been run against a live server** (see above).
-- **Tested on one environment.** Development and tests ran on Python 3.14 with numpy 2.5, pandas 3.0,
-  scikit-learn 1.9 and LightGBM 4.7. The CI workflow targets Python 3.11 and 3.13 but has not been
-  executed, and the minimum dependency versions in `pyproject.toml` have not been tested.
-- **Hourly granularity, weekday schedule, one site.** Intra-hour effects, holidays and multiple time
-  zones are not modelled. Days with no rows are treated as closed unless you ask otherwise.
-- **Small-sample models.** KNN and LightGBM here are tuned for hundreds of days of hourly counts. With
-  little history or very sparse buckets the lookup baseline can be the right answer.
-- **Quantile bands are not calibrated** and have no band for the projected close.
-- **Covariate models cannot be served from the command line.** Training and validation accept
+- Nothing here is validated on real data. Every example output in the documentation comes from
+  synthetic data, and the defaults were chosen for it. Window lengths, cut-offs, fold sizes, k grids,
+  thresholds and Monte Carlo parameters must be calibrated on your own history.
+- The SQL Server adapter has never been run against a live server (see above).
+- Development ran on Python 3.14 with numpy 2.5, pandas 3.0, scikit-learn 1.9 and LightGBM 4.7. CI
+  runs lint and the tests on Python 3.11 and 3.13 on Ubuntu with the newest releases pip resolves.
+  The minimum versions in `pyproject.toml` have not been tested.
+- The data is hourly, the schedule is by weekday and there is one site. Intra-hour effects,
+  holidays and multiple time zones are not modelled. Days with no rows are treated as closed unless
+  you ask otherwise.
+- KNN and LightGBM here are tuned for hundreds of days of hourly counts. With little history or very
+  sparse buckets the lookup baseline can be the right answer.
+- Quantile bands are not calibrated, and there is no band for the projected close.
+- Covariate models cannot be served from the command line. Training and validation accept
   `--covariate`, but today's covariate value has to come from a Python `covariate_provider`, so
   `pace` and `serve` refuse such models; use `PaceService` from the library.
-- **The Monte Carlo test depends on its assumptions** (stable intraday shape, independent days, fixed
+- The Monte Carlo test depends on its assumptions (stable intraday shape, independent days, fixed
   dispersion) and is not a forecast of real error.
-- **Artifacts are pickles.** Load only files your own training run wrote.
-- **No concurrency control beyond a lock** in the caches; the service is meant for a modest polling
-  load, not for high throughput.
+- Artifacts are pickles. Load only files your own training run wrote.
+- The caches use one lock and nothing else for concurrency. The service is meant for a modest
+  polling load, not for high throughput.
 - Whole-number rounding (`ceil`) is the default because the target is a count. For amounts use
   `postprocess="none"`.
 

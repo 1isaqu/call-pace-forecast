@@ -110,6 +110,17 @@ def test_aggregation_sums_hours_and_reclassifies_from_the_total():
     assert merged[11].status == "future"
 
 
+def test_an_open_hour_is_in_progress_when_any_bucket_is_running_it():
+    """A bucket with no rows today reports its current hour as future; the sum must not copy it."""
+    silent = build_bands([2.0] * 12, {}, 11, HOURS)
+    busy = build_bands([3.0] * 12, {8: 1, 9: 2, 10: 4}, 11, HOURS)
+    assert by_hour(silent)[11].status == "future"
+    for order in ([silent, busy], [busy, silent]):
+        merged = by_hour(aggregate_bands(order))
+        assert merged[11].status == "in_progress" and merged[11].actual is None
+        assert merged[12].status == "future"
+
+
 def test_aggregation_drops_quantile_bounds_and_passes_single_buckets_through():
     a = build_bands(FIVE, {8: 5}, 9, HOURS, [1.0] * 12, [9.0] * 12)
     assert aggregate_bands([a])[0].lower == 1.0

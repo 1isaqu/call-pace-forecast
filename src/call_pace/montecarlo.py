@@ -39,7 +39,10 @@ _KEYS = ["bucket", "date"]
 
 @dataclass(frozen=True)
 class MonteCarloConfig:
-    """Scenario parameters. Every default is invented; set them from your own expectations."""
+    """Scenario parameters.
+
+    Every default was chosen for the synthetic example; set them from your own expectations.
+    """
 
     n_scenarios: int = 200
     n_months: int = 6

@@ -1,6 +1,6 @@
 """Phase 1: the lookup baseline.
 
-The expected count for an hour is a robust central value of what that (bucket, hour) cell
+The expected count for an hour is the median (by default) of what that (bucket, hour) cell
 produced over a trailing window of recent days. There is nothing to tune beyond the window,
 which is why it is the model every other model has to beat.
 
@@ -81,7 +81,7 @@ def keyed_lookup_predict(
 
 
 class LookupForecaster:
-    """Median (or other robust) count per (bucket, hour) over a trailing window of days."""
+    """Median (or mean) count per (bucket, hour) over a trailing window of days."""
 
     name = "lookup"
 

@@ -1,14 +1,15 @@
 """Expected value as expected count times a typical ticket.
 
 Forecasting an amount directly is hard: amounts are heavy tailed and dominated by a few large
-events. Splitting it works better in practice:
+events. The decomposition reuses the count model and needs only a ticket lookup:
 
     expected value of an hour = expected count of that hour x typical ticket
 
-The count comes from any of the count models. The ticket is a plain lookup (a robust central
-value of recent event amounts), the same family as the baseline, with no trainable model.
+The count comes from any of the count models. The ticket is a plain lookup (the median of
+recent event amounts, or a winsorised mean), the same family as the baseline, with no
+trainable model.
 
-Choices kept from the original design:
+Design choices:
   * the median is the default estimator; a winsorised mean is the alternative for heavy tails;
   * the window is measured in OPERATING days of a calendar built from the first to the last
     day with events, so silent days still age the window;

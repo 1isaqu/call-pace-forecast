@@ -224,10 +224,11 @@ def _fold_row(index: int, block: pd.DataFrame) -> dict[str, float]:
 
 @dataclass(frozen=True)
 class PromotionCriteria:
-    """When a challenger may replace the baseline. Defaults are invented: calibrate them.
+    """When a challenger may replace the baseline.
 
-    Thresholds relative to the baseline scale across series of different volume; an absolute
-    MAE cap does not, so it is optional and off by default.
+    Defaults were chosen for the synthetic example: calibrate them. Thresholds relative to the
+    baseline scale across series of different volume; an absolute MAE cap does not, so it is
+    optional and off by default.
     """
 
     min_improvement_pct: float = 5.0

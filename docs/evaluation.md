@@ -1,8 +1,8 @@
 # Evaluation
 
 How models are compared, how a promotion is decided, what the Monte Carlo test does and how to
-read the quantile bands. All thresholds mentioned are invented defaults: calibrate them on your
-own data.
+read the quantile bands. All thresholds mentioned are defaults chosen for the synthetic example:
+calibrate them on your own data.
 
 ## 1. Walk-forward validation
 
@@ -22,10 +22,10 @@ fold 4: train [0, A+3s)                                                         
 Rules the code enforces and tests:
 
 1. No fold trains on a date later than or equal to a date it is tested on.
-2. **k is selected on folds 1 to n-1 only** (`knn_cross_validate`). The last fold never influences a
+2. k is selected on folds 1 to n-1 only (`knn_cross_validate`). The last fold never influences a
    choice: a test changes only the last fold's data and checks that the ranking in
    `feature_subset_search` is identical.
-3. The last fold is the **holdout**. It confirms; it does not select.
+3. The last fold is the holdout. It confirms; it does not select.
 4. The model that is deployed (`train_models`) is refitted on all data.
 5. The run needs `n_folds * fold_size_days + min_train_days` operating days, otherwise
    `InsufficientDataError` says how many are needed.
@@ -36,13 +36,13 @@ The lookup baseline is refitted inside every fold, using its own trailing window
 
 ## 2. Metrics
 
-All metrics are computed **after the serving post-processing** (`ceil` by default, then clipped at
+All metrics are computed after the serving post-processing (`ceil` by default, then clipped at
 zero). A model that looks better on raw floats can look worse once its output is shown as a whole
 number, so offline and online must use the same rounding.
 
 | Metric | Definition | Notes |
 |---|---|---|
-| MAE | mean of `abs(actual - predicted)` per hour | Primary metric. Robust to the small denominators of hourly counts, unlike MAPE. |
+| MAE | mean of `abs(actual - predicted)` per hour | Primary metric. It does not divide by the actual, so it stays defined for hours with zero events, unlike MAPE. |
 | Directional accuracy | share of hours where `sign(model - baseline) == sign(actual - baseline)` | Hours where the actual equals the baseline carry no direction and are dropped. It answers: when the model moves away from the baseline, is it moving the way reality moves? |
 | Coverage | share of actual values inside `[lower, upper]` | Compare to the nominal coverage, `upper quantile - lower quantile`. |
 | Band width | mean of `upper - lower` | A band that is too wide is "calibrated" and useless. Read together with coverage. |
@@ -54,24 +54,24 @@ number, so offline and online must use the same rounding.
 `decide_promotion(result, challenger, PromotionCriteria())` returns a decision with one line per
 check. A challenger is promoted only if every check passes.
 
-| Check | Rule | Default (invented) |
+| Check | Rule | Default |
 |---|---|---|
 | improvement | holdout MAE at least this much below the baseline's | 5 percent |
 | directional accuracy | holdout directional accuracy at least | 0.55 |
 | no fold regression | no fold is clearly worse than the baseline (see below) | abs 0.05 and rel 5 percent |
 | max MAE (optional) | holdout MAE below an absolute cap | off |
 
-**A noisy fold is not a regression.** A fold counts as a regression only if the challenger is worse
+A noisy fold is not a regression. A fold counts as a regression only if the challenger is worse
 than the baseline by more than the absolute tolerance AND by more than the relative tolerance. Two
 failure modes motivated this: on a low-volume fold the MAE is small, so a harmless absolute
 difference is a large relative one; on a high-volume fold the reverse. Requiring both avoids
 failing on either artefact.
 
-**Prefer thresholds relative to the baseline** (as here) over a fixed absolute MAE. An absolute
+Prefer thresholds relative to the baseline (as here) over a fixed absolute MAE. An absolute
 limit calibrated for one series is wrong for another, and the same code serves series of very
 different volume. The optional `max_mae` exists for a hard business limit.
 
-**Decide per bucket.** Pooled metrics can hide a model that wins on a high-volume bucket and loses
+Decide per bucket. Pooled metrics can hide a model that wins on a high-volume bucket and loses
 on a sparse one. `result.for_bucket("name")` returns the same run restricted to one bucket and
 `call-pace validate --per-bucket` prints a decision for each. Then set `Config.routing`.
 
@@ -103,7 +103,8 @@ A second question is how finely the share curve should be keyed. `projection.com
 (CLI: `call-pace projection --extra-key weekday_pos`) learns the median share per `(bucket, hour)`
 and per `(bucket, hour, extra key)` on the earlier days, projects the last `holdout_days` days with
 both and reports the error of each, a paired test and the decision. A row whose finer cell was never
-seen falls back to the coarser curve, and the number of such rows is printed. The finer key is
+seen, or has a zero median share, falls back to the coarser curve, and the number of such rows is
+printed. The finer key is
 recommended only if two conditions hold together:
 
 1. it lowers the held-out error by at least `min_gain_pct` (default 5 percent), and
@@ -111,7 +112,8 @@ recommended only if two conditions hold together:
    has fewer than `min_obs` training rows (default 5) or does not occur at all (`cell_sparsity`).
 
 A gain with thin cells is refused with that reason: a median over three days is a guess, and the
-gain is likely to be noise that will not repeat. Both thresholds are invented defaults.
+gain is likely to be noise that will not repeat. Both thresholds are defaults chosen for the
+synthetic example.
 
 ## 6. Monte Carlo stress test
 
@@ -133,9 +135,9 @@ directional accuracy exceeds a threshold in the last month and the probability t
 the lookup. Scenario `s` uses the random stream `(seed, s)`, so any single scenario can be
 reproduced alone.
 
-What it does **not** tell you: it is not a forecast of real future error. It assumes a stable
+What it does not tell you: it is not a forecast of real future error. It assumes a stable
 intraday and weekly shape, independent days and a fixed dispersion. It measures sensitivity to
-growth under those assumptions. All its parameters are invented defaults.
+growth under those assumptions. All its parameters are defaults chosen for the synthetic example.
 
 ## 7. Reading the quantile bands
 
@@ -143,25 +145,23 @@ growth under those assumptions. All its parameters are invented defaults.
 Poisson centre. Each served hour carries `lower`, `upper`, and, once the hour has closed,
 `position`: `below_band`, `within_band` or `above_band`.
 
-- **A band is a range of plausible hourly counts, not a guarantee.** With quantiles 0.25 and 0.75
-  the nominal coverage is 50 percent: about half of the hours should land inside. Whether that is
-  true on unseen days is empirical. `validate` prints the nominal and the empirical coverage on the
+- A band is a range of plausible hourly counts, not a guarantee. With quantiles 0.25 and 0.75 the
+  nominal coverage is 50 percent: about half of the hours should land inside. Whether that is true
+  on unseen days is empirical. `validate` prints the nominal and the empirical coverage on the
   holdout fold, and the mean width. Coverage far above nominal means a band wider than it needs to
-  be; far below means the model is overconfident. The bands are **not recalibrated** by this library:
-  check coverage before you let anyone act on a band.
-- **Counts are discrete and rounded up.** After `ceil`, lower and upper are whole numbers, and a
-  narrow band at low volume can be a single value.
-- **Quantile models can cross.** They are fitted independently, so the lower model can exceed the
-  upper for some inputs; `predict_bands` orders them so `lower <= upper`. The centre is not forced
-  inside the band.
-- **Use `position` instead of the sign of delta when volume is low.** A delta of -1 against an
-  expectation of 3 is noise; `within_band` says so. `below_band` is the signal worth a look.
-- **Bands exist only for one bucket.** For `all`, bounds are dropped: the sum of per-bucket bounds is
-  not a bound on the sum.
-- **The projected close has no band** for the same reason.
-- **Regime shifts break everything.** If volume changed level recently, a band learned on the old
-  level is wrong in both directions. Prefer a trailing window (`lookup_window_days`) and re-run
-  `validate` after a known change.
+  be; far below means the model is overconfident. This library does not recalibrate the bands, so
+  check coverage before you let anyone act on one.
+- Counts are discrete and rounded up. After `ceil`, lower and upper are whole numbers, and a narrow
+  band at low volume can be a single value.
+- Quantile models can cross. They are fitted independently, so the lower model can exceed the upper
+  for some inputs; `predict_bands` orders them so `lower <= upper`. The centre is not forced inside
+  the band.
+- When volume is low, read `position` instead of the sign of delta. A delta of -1 against an
+  expectation of 3 is noise, and `within_band` says so. `below_band` is the signal worth a look.
+- Bands exist only for one bucket. For `all`, bounds are dropped: the sum of per-bucket bounds is
+  not a bound on the sum. The projected close has no band for the same reason.
+- A recent change in volume level makes a band learned on the old level wrong in both directions.
+  Prefer a trailing window (`lookup_window_days`) and re-run `validate` after a known change.
 
 ## 8. Reading the pace table
 
@@ -171,7 +171,7 @@ Poisson centre. Each served hour carries `lower`, `upper`, and, once the hour ha
 | `in_progress` | the hour running now; no verdict yet |
 | `future` | the hour has not started |
 
-Closed hours with no rows count as zero actual. If the data source returned **no rows at all** for the
+Closed hours with no rows count as zero actual. If the data source returned no rows at all for the
 day, even the current hour is reported as `future` (the day has not visibly started), and the closed
 hours are scored against zero. Expected counts for future hours are conditioned on the cumulative
 reached so far.

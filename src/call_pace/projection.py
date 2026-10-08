@@ -338,11 +338,12 @@ def compare_share_keys(
     """Does keying the share curve more finely (say by weekday) earn its thinner cells?
 
     Both curves are learned on the earlier days and projected on the last `holdout_days` days.
-    A row whose finer cell was never seen falls back to the coarser curve and is counted. The
-    finer key is recommended only if it reduces the error by at least `min_gain_pct` percent AND
-    at most `max_thin_share` of its cells are thin (see `cell_sparsity`, measured on the training
-    days). The thresholds are invented defaults. Rows where either projection is undefined are
-    left out of both, so the two errors cover exactly the same observations.
+    A row whose finer cell was never seen, or has a zero median share, falls back to the coarser
+    curve and is counted. The finer key is recommended only if it reduces the error by at least
+    `min_gain_pct` percent AND at most `max_thin_share` of its cells are thin (see
+    `cell_sparsity`, measured on the training days). The thresholds are defaults chosen for the
+    synthetic example. Rows where either projection is undefined are left out of both, so the two
+    errors cover exactly the same observations.
     """
     fine, coarse = tuple(fine_keys), tuple(coarse_keys)
     if not set(coarse) < set(fine):
