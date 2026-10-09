@@ -77,10 +77,11 @@ A model is promoted only through the walk-forward protocol in [evaluation.md](ev
   while reading today's data returns a well-formed payload with empty bands and a message in
   `errors`, so a display that polls the endpoint does not go blank.
 - Today's data is cached for `data_ttl_seconds` (default 30) to protect the source from polling
-  bursts, and loaded models are cached for `artifact_ttl_seconds` (default 24 hours). Both use one
-  lock-protected `TtlCache`, so concurrent requests trigger one load. The model cache key includes
-  each file's modification time, so a retrained model is served from the next request on, without
-  waiting for the TTL or restarting the service.
+  bursts, and loaded models are cached for `artifact_ttl_seconds` (default 24 hours). The service
+  and the artifact store each keep their own lock-protected `TtlCache`, so concurrent requests for
+  the same key trigger one load. The model cache key includes each file's modification time, so a
+  retrained model is served from the next request on, without waiting for the TTL or restarting
+  the service.
 - `train` writes `artifacts/` (gitignored) at runtime: `lookup.json`, `knn.joblib`,
   `quantile.joblib`, `ticket.json`, `manifest.json`. Nothing fitted is committed. `joblib` is
   pickle based, so load only artifacts you produced yourself.
