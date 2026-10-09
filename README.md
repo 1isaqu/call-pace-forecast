@@ -282,9 +282,8 @@ The suite uses tiny inline fixtures and an in-memory synthetic generator; there 
 It covers the data contract, feature engineering (including train/serve parity), the three models,
 walk-forward folds and promotion rules, projection, ablation, Monte Carlo reproducibility, the
 ticket lookup, the pace logic, the service failure policy, artifacts and caching, the CLI, the HTTP
-app and SQL query construction. Tests that train models take a few seconds each; the whole suite
-(331 tests) took between two and three minutes on the development machine, depending on
-load.
+app and SQL query construction. The whole suite (333 tests) took about 25 seconds on a 4-core Linux
+machine and between two and three minutes on the slower development machine, depending on load.
 
 ## Project layout
 
