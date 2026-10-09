@@ -325,8 +325,8 @@ The full list with reasons is in [docs/decisions.md](docs/decisions.md). The one
   thresholds and Monte Carlo parameters must be calibrated on your own history.
 - The SQL Server adapter has never been run against a live server (see above).
 - Development ran on Python 3.14 with numpy 2.5, pandas 3.0, scikit-learn 1.9 and LightGBM 4.7. CI
-  runs lint and the tests on Python 3.11 and 3.13 on Ubuntu with the newest releases pip resolves.
-  The minimum versions in `pyproject.toml` have not been tested.
+  runs lint and the tests on Python 3.11, 3.12, 3.13 and 3.14 on Ubuntu with the newest releases
+  pip resolves. The minimum versions in `pyproject.toml` have not been tested.
 - The data is hourly, the schedule is by weekday and there is one site. Intra-hour effects,
   holidays and multiple time zones are not modelled. Days with no rows are treated as closed unless
   you ask otherwise.
