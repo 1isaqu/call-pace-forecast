@@ -316,7 +316,7 @@ def connect_from_env(environ: Mapping[str, str]) -> Callable[[str], Any]:
         try:
             driver = importlib.import_module("pyodbc")
         except ImportError as exc:
-            raise DataSourceError("install the optional extra: pip install '.[sqlserver]'") from exc
+            raise DataSourceError('install the optional extra: pip install ".[sqlserver]"') from exc
         return driver.connect(connection_string(environ, names[bucket]), readonly=True, timeout=10)
 
     return connect

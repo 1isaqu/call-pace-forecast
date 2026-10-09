@@ -1,4 +1,5 @@
 import json
+import sys
 
 import pandas as pd
 import pytest
@@ -225,6 +226,12 @@ def test_serve_hands_the_app_to_uvicorn(workspace, trained, monkeypatch):
     assert main(args) == 0
     assert captured["host"] == "127.0.0.1" and captured["port"] == 8123
     assert captured["app"].title == "call-pace-forecast"
+
+
+def test_serve_without_the_api_extra_names_the_install_command(workspace, monkeypatch, capsys):
+    monkeypatch.setitem(sys.modules, "uvicorn", None)
+    assert main(["serve", *data_args(workspace)]) == 2
+    assert 'pip install ".[api]"' in capsys.readouterr().err
 
 
 def test_bad_dates_and_missing_commands_exit_through_argparse(workspace):

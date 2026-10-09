@@ -1,5 +1,6 @@
 """SQL Server adapter: query construction and plumbing, tested with fakes. No database involved."""
 
+import re
 import sys
 import types
 from datetime import date, datetime
@@ -276,7 +277,8 @@ def test_connect_from_env_builds_a_read_only_connection_per_bucket(monkeypatch):
 
 def test_missing_driver_package_gives_an_actionable_error(monkeypatch):
     monkeypatch.setitem(sys.modules, "pyodbc", None)
-    with pytest.raises(DataSourceError, match="sqlserver"):
+    # Double quotes, so the command also works when pasted into cmd.exe.
+    with pytest.raises(DataSourceError, match=re.escape('pip install ".[sqlserver]"')):
         connect_from_env(ENV)("auto")
 
 

@@ -1,4 +1,4 @@
-"""Optional HTTP endpoint (needs the `api` extra: pip install '.[api]').
+"""Optional HTTP endpoint (needs the `api` extra: pip install ".[api]").
 
     GET /health          liveness
     GET /pace            pace for all buckets
@@ -27,7 +27,7 @@ def create_app(service: PaceService) -> Any:
     try:
         from fastapi import FastAPI, HTTPException
     except ImportError as exc:
-        raise ConfigError("install the optional extra: pip install '.[api]'") from exc
+        raise ConfigError('install the optional extra: pip install ".[api]"') from exc
 
     app = FastAPI(title="call-pace-forecast", version=__version__)
 
