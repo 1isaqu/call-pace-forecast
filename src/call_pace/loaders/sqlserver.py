@@ -179,8 +179,10 @@ def hourly_events_query(
 ) -> Query:
     """Outreach attempts per day and hour.
 
-    metric "outreach" counts every attempt, "answers" only those whose result is flagged
-    answered, "cpc" those flagged answered AND right-party (right-party contact).
+    metric "outreach" counts the attempts inside the operating hours whose agent exists in
+    `agents` and is not excluded. "answers" and "cpc" apply the same filters: "answers" keeps
+    the attempts whose result is flagged answered, "cpc" those flagged answered AND right-party
+    (right-party contact).
     """
     low, high = _day_bounds(start, end)
     agents, agent_values = excluded_agents_clause(options.excluded_agent_patterns)
