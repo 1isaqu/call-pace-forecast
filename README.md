@@ -13,7 +13,9 @@ models: you connect your own data through a small, documented contract.
 ## What it does
 
 - The expected count for an hour is the median of what that (bucket, hour) produced recently. KNN
-  and LightGBM have to beat it under scale-relative promotion rules that tolerate one noisy fold.
+  and LightGBM have to beat it under scale-relative promotion rules. A fold counts against a
+  challenger only when it is worse than the baseline by more than both an absolute and a relative
+  tolerance, so any number of folds that are only slightly worse do not block promotion.
 - The volume so far is the total before the hour being predicted, and the early-morning total is
   hidden until it has closed. Training and serving build features through the same code, and a test
   replays a past day hour by hour to check that they agree.
@@ -75,22 +77,23 @@ call-pace synth --out data/hourly.csv --amounts-out data/amounts.csv --days 120
 call-pace train --csv data/hourly.csv --amounts-csv data/amounts.csv
 call-pace validate --csv data/hourly.csv --per-bucket
 call-pace montecarlo --csv data/hourly.csv --scenarios 100
-call-pace pace --csv data/hourly.csv --amounts-csv data/amounts.csv \
-               --bucket all --now 2026-06-19T11:20:00
+call-pace pace --csv data/hourly.csv --amounts-csv data/amounts.csv --bucket all --now 2026-06-19T11:20:00
 ```
 
 `synth` writes `data/` (git-ignored). `train` writes `artifacts/` (git-ignored). `pace` replays a
 moment of the last synthetic day (2026-06-19 with these options): the `--now` option overrides the
 clock and the loader reads that day's rows from the CSV.
 
-Abridged output of the `validate` command above. The data is invented and the run is deterministic,
-but exact digits can differ on other library versions:
+Abridged output of the `validate` command above. The data is invented and the run is deterministic.
+The examples in this README were run on Linux, the platform CI uses, with Python 3.13, numpy 2.5,
+pandas 3.0, scikit-learn 1.9 and LightGBM 4.7. The KNN digits can differ on another platform or
+library version:
 
 ```
 Fold metrics
 | fold | n | mae_lookup | mae_knn | dir_knn | mae_quantile | dir_quantile | coverage | width |
 |---|---|---|---|---|---|---|---|---|
-| 1 | 240 | 1.846 | 1.925 | 0.503 | 1.783 | 0.534 | 0.533 | 2.846 |
+| 1 | 240 | 1.846 | 1.938 | 0.487 | 1.783 | 0.534 | 0.533 | 2.846 |
 ...
 Selected k: 10
 
@@ -111,15 +114,16 @@ The synthetic data has one high-volume bucket and one sparse bucket. In this run
 is promoted on the high-volume bucket and the KNN is not, and neither challenger beats the lookup on
 the sparse one, which is why decisions are made per bucket.
 
-The serving payload of `call-pace pace` (abridged; real output on the synthetic data, seed 7):
+The serving payload of `call-pace pace` (abridged, from the same run on the synthetic data with
+seed 7; the `knn` figures can differ by platform as above):
 
 ```json
 {
   "meta": {"in_operation": true, "bucket": "all", "buckets": ["auto", "consumer"],
            "model": "knn", "value_model": "ticket_x_expected_count"},
   "data": {
-    "current_hour": 11, "cumulative_actual": 21, "expected_total": 74, "projected_close": 76,
-    "value_cumulative_actual": 6473.25, "value_expected_total": 30379.59,
+    "current_hour": 11, "cumulative_actual": 21, "expected_total": 75, "projected_close": 76,
+    "value_cumulative_actual": 6473.25, "value_expected_total": 30501.42,
     "value_projected_close": 28541.11,
     "bands": [
       {"hour": 10, "expected": 8, "actual": 10, "delta": 2, "status": "above", "cumulative": 21,
@@ -133,11 +137,12 @@ The serving payload of `call-pace pace` (abridged; real output on the synthetic 
 ```
 
 `montecarlo` prints, per simulated month, percentiles of the model's MAE, of the lookup's MAE and of
-directional accuracy, then two probabilities. On the synthetic data with 100 scenarios (one to two
-minutes on the development machine) the last lines were:
+directional accuracy, then two probabilities. 100 scenarios took about 20 seconds on a 4-core Linux
+machine and about 2 minutes 40 seconds on the slower development machine. On the synthetic data the
+last lines were:
 
 ```
-P(directional accuracy > 60% in month 6) = 9.0%
+P(directional accuracy > 60% in month 6) = 8.0%
 P(model beats the lookup in month 6) = 75.0%
 ```
 
@@ -181,13 +186,15 @@ print(payload["data"]["projected_close"])
 
 ## Connect your own data
 
-Everything you need is in [docs/data-contract.md](docs/data-contract.md). In short:
+Everything you need is in [docs/data-contract.md](docs/data-contract.md).
+[docs/data-sources.md](docs/data-sources.md) says where the data in this repository comes from
+(only the seeded generator) and how to keep your own out of it. In short:
 
 1. The core input is one row per `(bucket, date, hour)` with a non-negative `count`.
    Optional extras: event amounts for value forecasts, numeric covariates.
 2. Provide it as a CSV (`--source csv`), through the SQL Server adapter (`--source sqlserver`, a
    generic schema documented in the contract), or by writing a loader with `load_hourly(start, end)`.
-3. Run `call-pace validate` first. If the lookup baseline wins, that is a real result.
+3. Run `call-pace validate` first. If the lookup baseline wins on your data, keep serving the lookup.
 
 The SQL Server adapter builds parameterised, read-only T-SQL. **It has not been executed against a
 live database in this repository.** What is tested without one: query text and parameters, that no
@@ -204,17 +211,19 @@ an absolute and a relative tolerance). See [docs/evaluation.md](docs/evaluation.
 
 ## How to interpret the bands
 
-- A band is a range of plausible hourly counts, not a guarantee. With quantiles 0.25 and 0.75 the
-  nominal coverage is 50 percent; `validate` prints the empirical coverage on the holdout fold. Far
-  above nominal means the band is wider than needed, far below means the model is overconfident.
-  The library does not recalibrate bands.
+- A band is a range of plausible hourly counts. With quantiles 0.25 and 0.75 the nominal coverage
+  is 50 percent; `validate` prints the empirical coverage on the holdout fold. Far above nominal
+  means the band is wider than needed, far below means the model is overconfident. The library
+  does not recalibrate bands.
 - For a bucket served by the quantile model, each closed hour carries `position`: `below_band`,
   `within_band` or `above_band`. At low volume a delta of -1 is noise; `within_band` says so,
   `below_band` is the signal worth a look.
 - Bands exist per bucket only. The projected close is a point estimate without an interval, because
   summing per-hour bounds does not bound the sum.
-- A band is served only for a bucket routed to the quantile model: export
-  `CALL_PACE_ROUTING=auto=quantile`, then run `call-pace pace --bucket auto` as in the quick start.
+- A band is served only for a bucket routed to the quantile model. Set
+  `CALL_PACE_ROUTING=auto=quantile` in the environment (`export` in a POSIX shell,
+  `$env:CALL_PACE_ROUTING = "auto=quantile"` in PowerShell, `set` in cmd), then run
+  `call-pace pace --bucket auto` with the other options of the quick start.
   On that invented data hour 8 comes out as an expectation of 4, a band of 3 to 6, an actual of 2
   and the position `below_band`.
 
@@ -230,7 +239,7 @@ calibrated on your own data.
 | `first_window_hours` | 2 | Hours summed into the early-window feature |
 | `covariates` | none | Extra numeric columns constant within a bucket-day |
 | `postprocess` | `ceil` | Rounding applied to every model output and metric (`ceil`, `round`, `none`) |
-| `lookup_window_days` | 60 | Trailing operating days used by the lookup and ticket |
+| `lookup_window_days` | 60 | Trailing window of the lookup and the ticket. The lookup keeps the last N days that have rows; the ticket keeps the last N operating weekdays, silent days included. With `None` the lookup uses all history and the ticket uses 60 days |
 | `lookup_stat`, `lookup_treatment` | `median`, `none` | Central statistic and outlier treatment |
 | `maturity_cutoff_days` | none | Per bucket: most recent days ignored when fitting |
 | `k_grid`, `default_k` | 5, 7, 10, 15, 20; 10 | KNN neighbours searched and fallback |
@@ -245,7 +254,8 @@ Environment variables read by `Config.from_env()`: `CALL_PACE_START_HOUR`, `CALL
 `CALL_PACE_DEFAULT_MODEL`, `CALL_PACE_MATURITY_CUTOFF_DAYS` (`bucket=days,...`),
 `CALL_PACE_ROUTING` (`bucket=model,...`). The SQL Server adapter reads `DB_DRIVER`, `DB_HOST`,
 `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAMES` (`bucket=database,...`). `.env.example` lists them
-with placeholder values; the library does not load `.env` files itself, export the variables.
+with placeholder values. The library does not load `.env` files itself, so set the variables in
+the environment.
 
 Commands:
 
@@ -272,9 +282,8 @@ The suite uses tiny inline fixtures and an in-memory synthetic generator; there 
 It covers the data contract, feature engineering (including train/serve parity), the three models,
 walk-forward folds and promotion rules, projection, ablation, Monte Carlo reproducibility, the
 ticket lookup, the pace logic, the service failure policy, artifacts and caching, the CLI, the HTTP
-app and SQL query construction. Tests that train models take a few seconds each; the whole suite
-(331 tests) took between two and three minutes on the development machine, depending on
-load.
+app and SQL query construction. The whole suite (333 tests) took about 25 seconds on a 4-core Linux
+machine and between two and three minutes on the slower development machine, depending on load.
 
 ## Project layout
 
@@ -289,7 +298,7 @@ src/call_pace/
   loaders/  common.py  memory.py  csv_loader.py  sqlserver.py
   cli.py  __main__.py
 tests/                                                     one test module per area
-docs/  architecture.md  data-contract.md  evaluation.md  decisions.md  glossary.md
+docs/  architecture.md  data-contract.md  data-sources.md  evaluation.md  decisions.md  glossary.md
 ```
 
 ## Key design decisions
@@ -300,7 +309,8 @@ The full list with reasons is in [docs/decisions.md](docs/decisions.md). The one
 - Offline metrics use the serving rounding, so a ranking cannot flip between lab and display.
 - A fold counts against a challenger only if it is worse than the baseline by both an absolute and
   a relative margin.
-- A formula beats a similarity model for the day total unless the model brings new information.
+- The share formula is the reference for the day total, and the neighbour models are tested
+  against it on held-out days. On the synthetic data the neighbour models win in the first hours.
 - Routing is per bucket, and the review trigger for a sparse bucket is explicit.
 - Value is expected count times a typical ticket, with an error instead of an invented ticket when
   there is no data.
@@ -314,8 +324,8 @@ The full list with reasons is in [docs/decisions.md](docs/decisions.md). The one
   thresholds and Monte Carlo parameters must be calibrated on your own history.
 - The SQL Server adapter has never been run against a live server (see above).
 - Development ran on Python 3.14 with numpy 2.5, pandas 3.0, scikit-learn 1.9 and LightGBM 4.7. CI
-  runs lint and the tests on Python 3.11 and 3.13 on Ubuntu with the newest releases pip resolves.
-  The minimum versions in `pyproject.toml` have not been tested.
+  runs lint and the tests on Python 3.11, 3.12, 3.13 and 3.14 on Ubuntu with the newest releases
+  pip resolves. The minimum versions in `pyproject.toml` have not been tested.
 - The data is hourly, the schedule is by weekday and there is one site. Intra-hour effects,
   holidays and multiple time zones are not modelled. Days with no rows are treated as closed unless
   you ask otherwise.
@@ -328,8 +338,8 @@ The full list with reasons is in [docs/decisions.md](docs/decisions.md). The one
 - The Monte Carlo test depends on its assumptions (stable intraday shape, independent days, fixed
   dispersion) and is not a forecast of real error.
 - Artifacts are pickles. Load only files your own training run wrote.
-- The caches use one lock and nothing else for concurrency. The service is meant for a modest
-  polling load, not for high throughput.
+- The service and the artifact store each keep their own `TtlCache` with one lock, and there is no
+  other concurrency control. The service is meant for a modest polling load.
 - Whole-number rounding (`ceil`) is the default because the target is a count. For amounts use
   `postprocess="none"`.
 

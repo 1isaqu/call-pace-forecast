@@ -350,7 +350,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
     try:
         import uvicorn
     except ImportError as exc:
-        raise ConfigError("install the optional extra: pip install '.[api]'") from exc
+        raise ConfigError('install the optional extra: pip install ".[api]"') from exc
     from .api import create_app
 
     uvicorn.run(create_app(_service(args, _config(args))), host=args.host, port=args.port)

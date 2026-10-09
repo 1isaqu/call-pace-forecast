@@ -268,10 +268,10 @@ def decide_promotion(
 ) -> PromotionDecision:
     """Apply the promotion rules to a walk-forward result.
 
-    A single fold is allowed to be slightly worse than the baseline when the gap is inside the
-    noise: a fold only counts as a regression if it is worse by more than the absolute
-    tolerance AND by more than the relative tolerance. Small folds have a small MAE, so a
-    purely relative rule would fail on a harmless absolute difference.
+    Any fold may be slightly worse than the baseline when the gap is inside the noise: a fold
+    only counts as a regression if it is worse by more than the absolute tolerance AND by more
+    than the relative tolerance. Small folds have a small MAE, so a purely relative rule would
+    fail on a harmless absolute difference.
     """
     rules = criteria or PromotionCriteria()
     metrics = result.fold_metrics

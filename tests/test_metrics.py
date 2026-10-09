@@ -45,7 +45,7 @@ def test_directional_accuracy_ignores_ties_with_the_baseline():
     actual = np.array([5, 5, 1, 3])
     baseline = np.array([3, 3, 3, 3])
     model = np.array([4, 2, 2, 9])
-    # Hour 4 is a tie (actual == baseline) and drops out: signs match in 1 of the 3 others.
+    # Hour 4 is a tie (actual == baseline) and drops out: signs match in 2 of the 3 others.
     assert directional_accuracy(actual, model, baseline) == pytest.approx(2 / 3)
     assert np.isnan(directional_accuracy([3, 3], [4, 4], [3, 3]))
 

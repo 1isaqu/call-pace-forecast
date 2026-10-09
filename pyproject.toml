@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,9 +7,20 @@ name = "call-pace-forecast"
 version = "0.1.0"
 description = "Intraday forecasting of cumulative outreach or agreement volume: lookup baseline, KNN on time-of-day curves, LightGBM quantile bands, walk-forward and Monte Carlo evaluation."
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [{ name = "Isaque Carvalho" }]
 requires-python = ">=3.11"
+keywords = ["forecasting", "intraday", "time series", "knn", "lightgbm", "walk-forward", "monte carlo"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Operating System :: OS Independent",
+]
 dependencies = [
     "numpy>=1.26",
     "pandas>=2.2",
@@ -23,6 +34,10 @@ dependencies = [
 api = ["fastapi>=0.110", "uvicorn>=0.29"]
 sqlserver = ["pyodbc>=5.0"]
 dev = ["pytest>=8.0", "ruff>=0.4", "httpx>=0.27", "fastapi>=0.110", "uvicorn>=0.29"]
+
+[project.urls]
+Homepage = "https://github.com/1isaqu/call-pace-forecast"
+Repository = "https://github.com/1isaqu/call-pace-forecast"
 
 [project.scripts]
 call-pace = "call_pace.cli:main"

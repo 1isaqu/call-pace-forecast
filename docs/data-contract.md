@@ -15,7 +15,7 @@ One row per `(bucket, date, hour)` that had activity.
 | `hour` | integer | Local hour of day in which the events happened, inside the operating window (default 8 to 19 inclusive). |
 | `count` | number >= 0 | How many events happened in that hour. |
 
-Optional extra columns are exogenous **covariates** (for example `days_since_event`). They must be
+Optional extra columns are exogenous covariates (for example `days_since_event`). They must be
 numeric and constant within a `(bucket, date)`; list them in `Config.covariates` (CLI:
 `--covariate NAME`) to make the models use them.
 
@@ -54,9 +54,9 @@ Any non-negative hourly quantity works, including a monetary amount; in that cas
 
 ### Sparse rows and silent days
 
-- A missing hour inside a bucket-day that has at least one row is **zero**. The modelling frame is
+- A missing hour inside a bucket-day that has at least one row is zero. The modelling frame is
   expanded to every operating hour (`features.complete_grid`).
-- A day with no rows at all is **not part of the history** by default: it is assumed to be a
+- A day with no rows at all is not part of the history by default: it is assumed to be a
   holiday or an outage. If your loader omits zero-activity days that were real working days, pass
   `--fill-missing-days` (`fill_missing_days=True`) to treat every operating weekday between a
   bucket's first and last date as present. This cannot be combined with covariates.
@@ -125,13 +125,13 @@ does not query them.
 | metric | Counts |
 |---|---|
 | `agreements` | first installments whose status is in the generated set, one row kept per `(agreement_id, portfolio_id, installment_no)` |
-| `outreach` | every row of `contact_events` |
-| `answers` | attempts whose result has `answered = 1` |
-| `cpc` | attempts whose result has `answered = 1 AND right_party = 1` (right-party contact) |
+| `outreach` | every attempt inside the operating hours whose agent exists in `agents` and is not excluded |
+| `answers` | the `outreach` attempts whose result has `answered = 1` |
+| `cpc` | the `outreach` attempts whose result has `answered = 1 AND right_party = 1` (right-party contact) |
 
 ### Status ids
 
-Statuses keep their meaning; the ids below are **invented defaults**. Set
+Statuses keep their meaning; the ids below are invented defaults. Set
 `SqlOptions.generated_status_ids` to your own.
 
 | id | label | in the "generated" set |
@@ -177,9 +177,9 @@ against your own test database before relying on it.
 
 Pick one:
 
-1. **Export to CSV** in the format of section 1 and use `--source csv --csv your_file.csv`.
-2. **Expose views** named as the generic tables and use `--source sqlserver`.
-3. **Write a loader** (any database, API or file). Example:
+1. Export to CSV in the format of section 1 and use `--source csv --csv your_file.csv`.
+2. Expose views named as the generic tables and use `--source sqlserver`.
+3. Write a loader for any database, API or file. Example:
 
 ```python
 class WarehouseLoader:
