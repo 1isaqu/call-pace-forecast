@@ -1,15 +1,15 @@
 """Ablation studies: does a feature, an estimator or a covariate earn its place?
 
-Business intuition about what drives volume is often wrong, and every feature added to a
-distance-based model makes the neighbours less similar. These tools test claims with the same
-walk-forward discipline used everywhere else:
+Every feature added to a distance-based model makes the neighbours less similar, so a feature
+has to show a gain before it is kept. The first three tools score their candidates on the
+walk-forward folds of `validation.make_folds`; the last one is a statistical test:
 
   * `feature_subset_search`: try every subset of features, rank on the early folds, confirm
     once on the final fold (never use the final fold to rank).
   * `compare_feature_sets`: MAE of named feature sets, fold by fold.
   * `compare_lookup_variants`: estimator x outlier treatment x key for the baseline lookup.
-  * `covariate_signal_report`: after controlling for hour and bucket, is there any relation
-    left between an exogenous covariate and the residual?
+  * `covariate_signal_report`: after controlling for hour, bucket and weekday, is there any
+    relation left between an exogenous covariate and the residual?
 """
 
 from __future__ import annotations

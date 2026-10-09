@@ -7,17 +7,15 @@ Two ways to answer "how many will we have by closing time?":
   * `NeighborProjector`: a similarity model. Find past days that looked like today at this
     point and take the median of their final totals.
 
-The comparison is the interesting part. By construction, share = cumulative / total, so the
-formula inverts exactly the identity the similarity model has to learn indirectly. A model that
-approximates a relation cannot beat a formula that states it unless it brings information the
-formula ignores (weekday effects, seasonality, external events). `evaluate_projection` lets you
-check that on your own data instead of taking it on faith.
+By construction, share = cumulative / total, so the formula inverts the identity that the
+similarity model has to learn from past days. `evaluate_projection` scores both, per hour, on
+held-out days. Early in the day the cumulative is small and dividing it by a small share
+amplifies its noise, so the similarity model can win in those hours.
 
 A related question is how finely the share curve itself should be keyed. Adding the weekday to
 the key can sharpen the curve, but every extra key value splits the history into thinner cells
-whose medians are noisier. `compare_share_keys` weighs the gain against `cell_sparsity`, with
-the same discipline as the rest of the library: a finer key is adopted only when it clearly
-helps on held-out days AND its cells stay populated.
+whose medians are noisier. `compare_share_keys` weighs the gain against `cell_sparsity`: a finer
+key is adopted only when it clearly helps on held-out days AND its cells stay populated.
 """
 
 from __future__ import annotations
