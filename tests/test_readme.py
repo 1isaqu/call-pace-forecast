@@ -48,7 +48,8 @@ def test_the_variables_config_reads_are_all_in_the_readme():
 def test_required_repository_files_exist():
     for name in ("LICENSE", ".gitignore", ".env.example", ".github/workflows/ci.yml"):
         assert (ROOT / name).is_file(), name
-    for name in ("architecture", "data-contract", "evaluation", "decisions", "glossary"):
+    docs = ("architecture", "data-contract", "data-sources", "evaluation", "decisions", "glossary")
+    for name in docs:
         assert (ROOT / "docs" / f"{name}.md").is_file(), name
 
 

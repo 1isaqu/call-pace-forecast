@@ -181,7 +181,9 @@ print(payload["data"]["projected_close"])
 
 ## Connect your own data
 
-Everything you need is in [docs/data-contract.md](docs/data-contract.md). In short:
+Everything you need is in [docs/data-contract.md](docs/data-contract.md).
+[docs/data-sources.md](docs/data-sources.md) says where the data in this repository comes from
+(only the seeded generator) and how to keep your own out of it. In short:
 
 1. The core input is one row per `(bucket, date, hour)` with a non-negative `count`.
    Optional extras: event amounts for value forecasts, numeric covariates.
@@ -289,7 +291,7 @@ src/call_pace/
   loaders/  common.py  memory.py  csv_loader.py  sqlserver.py
   cli.py  __main__.py
 tests/                                                     one test module per area
-docs/  architecture.md  data-contract.md  evaluation.md  decisions.md  glossary.md
+docs/  architecture.md  data-contract.md  data-sources.md  evaluation.md  decisions.md  glossary.md
 ```
 
 ## Key design decisions
