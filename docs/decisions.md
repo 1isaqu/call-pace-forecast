@@ -47,8 +47,8 @@ Because `share = cumulative / total`, projecting the total by `cumulative / typi
 exactly the identity a neighbour model has to learn from past days. The library ships the formula
 (`ProportionProjector`) as the reference and the neighbour models (`NeighborProjector`) as
 challengers, and `call-pace projection` scores them per hour on held-out days. On the synthetic data
-of the quick start the neighbour models are much better at 8 and 9 o'clock, where the
-cumulative is small and dividing it by a small share amplifies its noise. From late morning on the
+of the quick start the neighbour models are much better at 8 o'clock and still ahead at 9, where
+the cumulative is small and dividing it by a small share amplifies its noise. From late morning on the
 formula is better in most hours, and over the whole day the `hour_feature` neighbour model had the
 lower MAE. Run the comparison on your own data before choosing.
 
