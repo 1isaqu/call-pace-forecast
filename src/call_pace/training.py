@@ -103,6 +103,7 @@ def _lookup(config: Config) -> LookupForecaster:
 
 
 def _ticket(config: Config) -> TicketLookup:
+    # The ticket needs a finite window: with lookup_window_days=None it uses 60 operating days.
     return TicketLookup(
         window_days=config.lookup_window_days or 60,
         maturity_cutoff_days=config.maturity_cutoff_days,

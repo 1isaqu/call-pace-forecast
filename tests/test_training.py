@@ -57,6 +57,15 @@ def test_amounts_add_a_ticket_lookup(tmp_path, hourly, config):
     assert store.load("ticket").covers(["auto", "consumer"])
 
 
+def test_the_ticket_uses_60_days_when_the_lookup_window_is_none(tmp_path, hourly, config):
+    store = ArtifactStore(tmp_path)
+    no_window = config.replace(lookup_window_days=None)
+    amounts = make_synthetic_amounts(hourly)
+    train_models(hourly, no_window, store, amounts=amounts, kinds=("lookup",))
+    assert store.load("lookup").window_days is None
+    assert store.load("ticket").window_days == 60
+
+
 def test_the_deployed_model_is_fitted_on_all_the_data(tmp_path, hourly, frame, spec, config):
     store = ArtifactStore(tmp_path)
     train_models(hourly, config, store, kinds=("lookup",))
