@@ -145,12 +145,12 @@ growth under those assumptions. All its parameters are defaults chosen for the s
 Poisson centre. Each served hour carries `lower`, `upper`, and, once the hour has closed,
 `position`: `below_band`, `within_band` or `above_band`.
 
-- A band is a range of plausible hourly counts, not a guarantee. With quantiles 0.25 and 0.75 the
-  nominal coverage is 50 percent: about half of the hours should land inside. Whether that is true
-  on unseen days is empirical. `validate` prints the nominal and the empirical coverage on the
-  holdout fold, and the mean width. Coverage far above nominal means a band wider than it needs to
-  be; far below means the model is overconfident. This library does not recalibrate the bands, so
-  check coverage before you let anyone act on one.
+- A band is a range of plausible hourly counts. With quantiles 0.25 and 0.75 the nominal coverage
+  is 50 percent: about half of the hours should land inside. Whether that is true on unseen days
+  is empirical. `validate` prints the nominal and the empirical coverage on the holdout fold, and
+  the mean width. Coverage far above nominal means a band wider than it needs to be; far below
+  means the model is overconfident. This library does not recalibrate the bands, so check coverage
+  before you let anyone act on one.
 - Counts are discrete and rounded up. After `ceil`, lower and upper are whole numbers, and a narrow
   band at low volume can be a single value.
 - Quantile models can cross. They are fitted independently, so the lower model can exceed the upper

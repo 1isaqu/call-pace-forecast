@@ -4,9 +4,9 @@ Three gradient-boosted models share one feature set:
   * a Poisson-objective model for the central expectation (the target is a count),
   * a lower-quantile model and an upper-quantile model for the band.
 
-The band is a range of plausible hourly counts, not a guarantee. A band fitted at the 25th and
-75th percentiles has a nominal coverage of 50 percent; what it actually covers on unseen days
-is an empirical question answered by `validation.run_walk_forward` (`coverage` column).
+The band is a range of plausible hourly counts. A band fitted at the 25th and 75th percentiles
+has a nominal coverage of 50 percent; what it actually covers on unseen days is an empirical
+question answered by `validation.run_walk_forward` (`coverage` column).
 """
 
 from __future__ import annotations

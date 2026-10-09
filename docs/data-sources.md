@@ -30,9 +30,9 @@ The generator plants two things on purpose so the models have something to find:
 - a day-level multiplier, which makes the volume so far informative about the rest of the day, and
 - one high-volume bucket and one sparse bucket, because the models behave differently on the two.
 
-Metrics computed on this data describe the generator. They show that the pipeline runs and that
-the walk-forward and promotion rules work. They say nothing about how well any model would do on
-your data.
+Metrics computed on this data describe the generator: they show that the pipeline runs and that
+the walk-forward and promotion rules work, and they say nothing about how well any model would do
+on your data.
 
 The Monte Carlo test (`call-pace montecarlo`) builds its scenarios from the shape of the history
 you give it. On the quick start that history is tier 0 data, and the scenario parameters in
