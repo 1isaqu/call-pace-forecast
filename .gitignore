@@ -34,3 +34,7 @@ __pycache__/
 .coverage
 htmlcov/
 reports/
+
+# Local notes
+HANDOFF.md
+NEXT-AI-SUMMARY.md
