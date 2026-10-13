@@ -345,6 +345,5 @@ The full list with reasons is in [docs/decisions.md](docs/decisions.md). The one
 
 ## License and disclaimer
 
-MIT, see [LICENSE](LICENSE). This is an independent portfolio project. It is not affiliated with any
-company, and it contains no real data: all data in the tests, the documentation and the quick start
-is generated or invented.
+MIT, see [LICENSE](LICENSE). Built from problems I work on in debt collections and rewritten on synthetic data. It contains no
+real data: all data in the tests, the documentation and the quick start is generated or invented.
