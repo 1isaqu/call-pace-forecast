@@ -381,5 +381,7 @@ code:
 ## License and disclaimer
 
 MIT, see [LICENSE](LICENSE). Built from problems I work on in debt collections and rewritten on
-synthetic data. It contains no real data: all data in the tests, the documentation and the quick
-start is generated or invented.
+synthetic data. The repository holds no data from that work: the tests, the documentation examples
+and the quick start use generated or invented data. The evaluation on public call-center data
+downloads its data at run time, see [the results section](#results-on-public-call-center-data).
+Only its aggregate results and figures are committed.
