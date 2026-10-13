@@ -2,12 +2,12 @@
 
 This repository contains no data and no fitted model. This page lists where every row and every
 number the code works on comes from, grouped into tiers by how far you can trust and reproduce
-them. Last reviewed on 2026-10-09.
+them. Last reviewed on 2026-10-13.
 
 | Tier | What it is | In this repository |
 |---|---|---|
 | 0 | Invented data from a seeded generator, and invented rows written inside the tests | Yes: `src/call_pace/synthetic.py` and `tests/` |
-| 1 | A public dataset downloaded at run time | None used |
+| 1 | A public dataset downloaded at run time | One, fetched only on request: the "Anonymous Bank" call-center data. No test and no CI job uses it |
 | 2 | Your own data, through a CSV file, the SQL Server adapter or your own loader | Never committed |
 
 ## Tier 0: invented data
@@ -45,10 +45,18 @@ downloads anything or opens a network connection, and no test connects to a data
 
 ## Tier 1: public datasets
 
-None is used, and the code downloads nothing at run time. Any hourly count series could be
-mapped onto the contract to exercise the code, but its results would say nothing about outreach or
-agreement volume. If you add a public dataset, document its source, its license, the date you
-checked the terms and what it cannot test.
+One public dataset is supported, and the code downloads it only when you call
+`call_pace.anonymous_bank.fetch` or run `scripts/evaluate_anonymous_bank.py`: the "Anonymous Bank"
+call-center data of 1999, published by the Technion SEE Laboratory
+(<https://seelab.net.technion.ac.il/data/>). Its terms, checked on 2026-10-13: the data is free for
+use, users are asked to notify Avi Mandelbaum and to acknowledge the source, and there is no formal
+licence. The repository does not contain the data, and the hash of every file is pinned in the code.
+The dataset can test a bank call center with a weekday calendar and six queues of very different
+volume. It cannot test outbound calling, collections or any recent operation. The run and its
+results are in [real-data-evaluation.md](real-data-evaluation.md).
+
+No test and no CI job uses it. If you add another public dataset, document its source, its licence,
+the date you checked the terms and what it cannot test.
 
 ## Tier 2: your own data
 
