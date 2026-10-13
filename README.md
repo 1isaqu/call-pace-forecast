@@ -227,6 +227,30 @@ an absolute and a relative tolerance). See [docs/evaluation.md](docs/evaluation.
   On that invented data hour 8 comes out as an expectation of 4, a band of 3 to 6, an actual of 2
   and the position `below_band`.
 
+## Results on public call-center data
+
+One run uses real data that anyone can download: the call-by-call record of the call center of an
+Israeli retail bank for 1999, about 444,000 calls on Sunday to Thursday in six service types,
+published by the Technion SEE Laboratory. The package ran on it with a configuration change only, in
+about seven seconds. The quantile model is promoted for the busiest service type (about 63 calls per
+hour, 14% lower error than the baseline on the last fold) and the KNN for one other type. The baseline
+stays for the other four. The band covers 51% of the outcomes of the busiest type for a nominal 50%,
+and far more for the smallest types.
+
+![Held-out Wednesdays for a high-volume and a sparse service type](docs/img/anonymous_bank_2_held_out_days.png)
+
+The data is not in the repository, and the code downloads it only when you call
+`call_pace.anonymous_bank.fetch` or run the script below. The protocol, the cleaning counts, the
+figures and the limits are in [docs/real-data-evaluation.md](docs/real-data-evaluation.md). To rerun it:
+
+```bash
+pip install -e ".[dev,realdata]"
+python scripts/evaluate_anonymous_bank.py --data data --out data/results --figures docs/img
+```
+
+Data: call-center data of "Anonymous Bank", Israel, 1999, organized by I. Guedj and A. Mandelbaum,
+Technion SEE Laboratory (<https://seelab.net.technion.ac.il/data/>), used under the authors' terms.
+
 ## Configuration
 
 `Config` is a frozen dataclass. Every default was chosen for the synthetic example and has to be
@@ -274,7 +298,7 @@ Commands:
 
 ```bash
 pip install -e ".[dev]"
-ruff check src tests
+ruff check src tests scripts
 pytest
 ```
 
@@ -282,7 +306,8 @@ The suite uses tiny inline fixtures and an in-memory synthetic generator; there 
 It covers the data contract, feature engineering (including train/serve parity), the three models,
 walk-forward folds and promotion rules, projection, ablation, Monte Carlo reproducibility, the
 ticket lookup, the pace logic, the service failure policy, artifacts and caching, the CLI, the HTTP
-app and SQL query construction. The whole suite (333 tests) took about 25 seconds on a 4-core Linux
+app, SQL query construction and the cleaning and hash checks of the public data module. The whole
+suite (345 tests) took about 25 seconds on a 4-core Linux
 machine and between two and three minutes on the slower development machine, depending on load.
 
 ## Project layout
@@ -295,10 +320,13 @@ src/call_pace/
   validation.py  ablation.py  montecarlo.py  synthetic.py  evaluation and experiments
   pace.py  service.py  api.py                              serving
   artifacts.py  training.py                                runtime model files, train_models
+  anonymous_bank.py                                        public call-center data: fetch, clean
   loaders/  common.py  memory.py  csv_loader.py  sqlserver.py
   cli.py  __main__.py
+scripts/  evaluate_anonymous_bank.py                       real-data run and figures
 tests/                                                     one test module per area
 docs/  architecture.md  data-contract.md  data-sources.md  evaluation.md  decisions.md  glossary.md
+       real-data-evaluation.md  img/
 ```
 
 ## Key design decisions
@@ -319,9 +347,11 @@ The full list with reasons is in [docs/decisions.md](docs/decisions.md). The one
 
 ## Limitations
 
-- Nothing here is validated on real data. Every example output in the documentation comes from
-  synthetic data, and the defaults were chosen for it. Window lengths, cut-offs, fold sizes, k grids,
-  thresholds and Monte Carlo parameters must be calibrated on your own history.
+- Apart from one run on public call-center data (see above), nothing here is validated on real
+  data. Every other example output in the documentation comes from synthetic data, and the defaults
+  were chosen for it. The public run covers one site and one year, and it is not debt collection.
+  Window lengths, cut-offs, fold sizes, k grids, thresholds and Monte Carlo parameters must be
+  calibrated on your own history.
 - The SQL Server adapter has never been run against a live server (see above).
 - Development ran on Python 3.14 with numpy 2.5, pandas 3.0, scikit-learn 1.9 and LightGBM 4.7. CI
   runs lint and the tests on Python 3.11, 3.12, 3.13 and 3.14 on Ubuntu with the newest releases
