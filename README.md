@@ -193,8 +193,10 @@ Everything you need is in [docs/data-contract.md](docs/data-contract.md).
 1. The core input is one row per `(bucket, date, hour)` with a non-negative `count`.
    Optional extras: event amounts for value forecasts, numeric covariates.
 2. Provide it as a CSV (`--source csv`), through the SQL Server adapter (`--source sqlserver`, a
-   generic schema documented in the contract), or by writing a loader with `load_hourly(start, end)`.
-3. Run `call-pace validate` first. If the lookup baseline wins on your data, keep serving the lookup.
+   generic schema documented in the contract), or by writing a loader with
+   `load_hourly(start, end)`.
+3. Run `call-pace validate` first. If the lookup baseline wins on your data, keep serving the
+   lookup.
 
 The SQL Server adapter builds parameterised, read-only T-SQL. **It has not been executed against a
 live database in this repository.** What is tested without one: query text and parameters, that no
@@ -233,15 +235,16 @@ One run uses real data that anyone can download: the call-by-call record of the 
 Israeli retail bank for 1999, about 444,000 calls on Sunday to Thursday in six service types,
 published by the Technion SEE Laboratory. The package ran on it with a configuration change only, in
 about seven seconds. The quantile model is promoted for the busiest service type (about 63 calls per
-hour, 14% lower error than the baseline on the last fold) and the KNN for one other type. The baseline
-stays for the other four. The band covers 51% of the outcomes of the busiest type for a nominal 50%,
-and far more for the smallest types.
+hour, 14% lower error than the baseline on the last fold) and the KNN for one other type. The
+baseline stays for the other four. The band covers 51% of the outcomes of the busiest type for a
+nominal 50%, and far more for the smallest types.
 
 ![Held-out Wednesdays for a high-volume and a sparse service type](docs/img/anonymous_bank_2_held_out_days.png)
 
 The data is not in the repository, and the code downloads it only when you call
 `call_pace.anonymous_bank.fetch` or run the script below. The protocol, the cleaning counts, the
-figures and the limits are in [docs/real-data-evaluation.md](docs/real-data-evaluation.md). To rerun it:
+figures and the limits are in [docs/real-data-evaluation.md](docs/real-data-evaluation.md). To rerun
+it:
 
 ```bash
 pip install -e ".[dev,realdata]"
@@ -331,7 +334,8 @@ docs/  architecture.md  data-contract.md  data-sources.md  evaluation.md  decisi
 
 ## Key design decisions
 
-The full list with reasons is in [docs/decisions.md](docs/decisions.md). The ones that shaped the code:
+The full list with reasons is in [docs/decisions.md](docs/decisions.md). The ones that shaped the
+code:
 
 - The hour is an exact partition key in the lookup, not a distance dimension.
 - Offline metrics use the serving rounding, so a ranking cannot flip between lab and display.
@@ -343,7 +347,8 @@ The full list with reasons is in [docs/decisions.md](docs/decisions.md). The one
 - Value is expected count times a typical ticket, with an error instead of an invented ticket when
   there is no data.
 - A data failure degrades the response; a bad request or a missing model does not.
-- Data access uses bound parameters and applies every business filter before the "latest row" ranking.
+- Data access uses bound parameters and applies every business filter before the "latest row"
+  ranking.
 
 ## Limitations
 
@@ -375,5 +380,6 @@ The full list with reasons is in [docs/decisions.md](docs/decisions.md). The one
 
 ## License and disclaimer
 
-MIT, see [LICENSE](LICENSE). Built from problems I work on in debt collections and rewritten on synthetic data. It contains no
-real data: all data in the tests, the documentation and the quick start is generated or invented.
+MIT, see [LICENSE](LICENSE). Built from problems I work on in debt collections and rewritten on
+synthetic data. It contains no real data: all data in the tests, the documentation and the quick
+start is generated or invented.
